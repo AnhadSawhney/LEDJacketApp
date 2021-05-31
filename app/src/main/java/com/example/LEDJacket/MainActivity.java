@@ -1,9 +1,8 @@
-package com.example.testtabbed;
+package com.example.ledjacket;
 
 import android.os.Bundle;
 
-import com.google.android.material.floatingactionbutton.FloatingActionButton;
-import com.google.android.material.snackbar.Snackbar;
+//import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.tabs.TabLayout;
 
 //import androidx.viewpager.widget.ViewPager;
@@ -11,17 +10,16 @@ import com.google.android.material.tabs.TabLayout;
 import androidx.fragment.app.FragmentActivity;
 import androidx.viewpager2.widget.ViewPager2;
 
-import android.view.Menu;
-import android.view.MenuItem;
-import android.view.View;
-
-import com.example.testtabbed.ui.main.SectionsPagerAdapter;
-import com.example.testtabbed.databinding.ActivityMainBinding;
+import com.example.ledjacket.ui.main.SectionsPagerAdapter;
+import com.example.ledjacket.AudioThread;
+import com.example.ledjacket.databinding.ActivityMainBinding;
 import com.google.android.material.tabs.TabLayoutMediator;
 
 //https://developer.android.com/training/animation/screen-slide-2
+
 public class MainActivity extends FragmentActivity { //AppCompatActivity {
 
+    private AudioThread audioThread;
     private ActivityMainBinding binding;
 
     /**
@@ -42,13 +40,12 @@ public class MainActivity extends FragmentActivity { //AppCompatActivity {
         viewPager.setAdapter(sectionsPagerAdapter);
 
         TabLayout tabs = binding.tabs;
-        //tabs.setupWithViewPager(viewPager);
         new TabLayoutMediator(tabs, viewPager,
-                (tab, position) -> tab.setText("OBJECT " + (position + 1))
+                (tab, position) -> tab.setText(getResources().getStringArray(R.array.tab_titles)[position])
         ).attach();
 
 
-        FloatingActionButton fab = binding.fab;
+        /*FloatingActionButton fab = binding.fab;
 
         fab.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -56,7 +53,7 @@ public class MainActivity extends FragmentActivity { //AppCompatActivity {
                 Snackbar.make(view, "Replace with your own action", Snackbar.LENGTH_LONG)
                         .setAction("Action", null).show();
             }
-        });
+        });*/
     }
 
     @Override
@@ -70,4 +67,22 @@ public class MainActivity extends FragmentActivity { //AppCompatActivity {
             viewPager.setCurrentItem(viewPager.getCurrentItem() - 1);
         }
     }
+
+    /*@Override
+    protected void onPause() {
+        super.onPause();
+        audioThread.stop_recording();
+        try {
+            audioThread.join();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        audioThread = new AudioThread();
+        audioThread.start();
+    }*/
 }

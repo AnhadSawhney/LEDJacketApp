@@ -1,5 +1,8 @@
 <resources>
-    <string name="app_name">TestTabbed</string>
-    <string name="tab_text_1">Tab 1</string>
-    <string name="tab_text_2">Tab 2</string>
+    <string name="app_name">LEDJacket</string>
+    <string-array name="tab_titles">
+        <item>Animations</item>
+        <item>Visualization</item>
+        <item>Settings</item>
+    </string-array>
 </resources>

@@ -7,7 +7,7 @@ android {
     buildToolsVersion "30.0.3"
 
     defaultConfig {
-        applicationId "com.example.testtabbed"
+        applicationId "com.example.ledjacket"
         minSdkVersion 16
         targetSdkVersion 30
         versionCode 1
@@ -27,6 +27,7 @@ android {
         targetCompatibility JavaVersion.VERSION_1_8
     }
     buildFeatures {
+        dataBinding true
         viewBinding true
     }
 }
