@@ -8,7 +8,7 @@
     tools:context=".MainActivity">
 
     <!-- A ViewPager2 element with a TabLayout -->
-    <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical">
@@ -16,7 +16,8 @@
         <com.google.android.material.tabs.TabLayout
             android:id="@+id/tabs"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
+            android:layout_height="wrap_content"
+            app:tabIndicatorColor="?attr/colorPrimary" />
 
         <androidx.viewpager2.widget.ViewPager2
             android:id="@+id/view_pager"

@@ -1,6 +1,7 @@
 package com.example.ledjacket;
 
 import android.os.Bundle;
+import android.widget.GridView;
 
 //import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.tabs.TabLayout;
@@ -43,7 +44,6 @@ public class MainActivity extends FragmentActivity { //AppCompatActivity {
         new TabLayoutMediator(tabs, viewPager,
                 (tab, position) -> tab.setText(getResources().getStringArray(R.array.tab_titles)[position])
         ).attach();
-
 
         /*FloatingActionButton fab = binding.fab;
 

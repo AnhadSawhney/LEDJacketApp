@@ -5,4 +5,7 @@
         <item>Visualization</item>
         <item>Settings</item>
     </string-array>
+    <string name="viz_1">Oscilloscope</string>
+    <string name="viz_2">Spectrum Analyzer</string>
+    <string name="viz_3">Beat Detector</string>
 </resources>
