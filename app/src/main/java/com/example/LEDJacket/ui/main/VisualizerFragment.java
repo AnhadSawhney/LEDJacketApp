@@ -1,13 +1,16 @@
 package com.example.ledjacket.ui.main;
 
+import android.content.Context;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.SurfaceView;
 
 import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
 
+import com.example.ledjacket.SurfaceViewThread;
 import com.example.ledjacket.databinding.FragmentVisualizerBinding;
 
 /**
@@ -19,6 +22,8 @@ public class VisualizerFragment extends Fragment {
 
     //private PageViewModel pageViewModel;
     private FragmentVisualizerBinding binding;
+
+    private Context context;
 
     public static VisualizerFragment newInstance(int index) {
         VisualizerFragment fragment = new VisualizerFragment();
@@ -47,13 +52,16 @@ public class VisualizerFragment extends Fragment {
         binding = FragmentVisualizerBinding.inflate(inflater, container, false);
         View root = binding.getRoot();
 
-        /*final TextView textView = binding.sectionLabel;
-        pageViewModel.getText().observe(getViewLifecycleOwner(), new Observer<String>() {
-            @Override
-            public void onChanged(@Nullable String s) {
-                //textView.setText(s);
-            }
-        });*/
+        context = getActivity();
+
+        //START ALL THE THREADS
+
+        //AUDIOTHREAD CALLS A CALLBACK FUNCTION FROM EACH OF THESE THREADS TO FEED THEM NEW DATA AND FORCE THEM TO DRAW AGAIN
+        //THAT WAY THEY UPDATE WHENEVER THE AUDIOTHREAD IS READY
+        final SurfaceViewThread swt1 = (SurfaceViewThread) binding.oscilloscopeSurfaceView;
+        final SurfaceViewThread swt2 = (SurfaceViewThread) binding.spectrumSurfaceView;
+        final SurfaceViewThread swt3 = (SurfaceViewThread) binding.beatSurfaceView;
+
         return root;
     }
 

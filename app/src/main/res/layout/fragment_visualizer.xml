@@ -27,10 +27,10 @@
             android:text="@string/viz_1"
             android:textColor="?attr/colorSecondary" />
 
-        <SurfaceView
-            android:id="@+id/surfaceView"
+        <com.example.ledjacket.SurfaceViewThread
+            android:id="@+id/oscilloscopeSurfaceView"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
+            android:layout_height="80dp" />
 
         <TextView
             android:id="@+id/textView2"
@@ -39,10 +39,10 @@
             android:text="@string/viz_2"
             android:textColor="?attr/colorSecondary" />
 
-        <SurfaceView
-            android:id="@+id/surfaceView2"
+        <com.example.ledjacket.SurfaceViewThread
+            android:id="@+id/spectrumSurfaceView"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
+            android:layout_height="80dp" />
 
         <TextView
             android:id="@+id/textView3"
@@ -51,9 +51,9 @@
             android:text="@string/viz_3"
             android:textColor="?attr/colorSecondary" />
 
-        <SurfaceView
-            android:id="@+id/surfaceView3"
+        <com.example.ledjacket.SurfaceViewThread
+            android:id="@+id/beatSurfaceView"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
+            android:layout_height="80dp" />
     </LinearLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -1,6 +1,9 @@
 package com.example.ledjacket;
 
+import android.Manifest;
+import android.content.pm.PackageManager;
 import android.os.Bundle;
+import android.util.Log;
 import android.widget.GridView;
 
 //import com.google.android.material.floatingactionbutton.FloatingActionButton;
@@ -8,6 +11,8 @@ import com.google.android.material.tabs.TabLayout;
 
 //import androidx.viewpager.widget.ViewPager;
 //import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 import androidx.fragment.app.FragmentActivity;
 import androidx.viewpager2.widget.ViewPager2;
 
@@ -29,6 +34,8 @@ public class MainActivity extends FragmentActivity { //AppCompatActivity {
      */
     private ViewPager2 viewPager;
 
+    boolean canRecord = false;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -45,6 +52,14 @@ public class MainActivity extends FragmentActivity { //AppCompatActivity {
                 (tab, position) -> tab.setText(getResources().getStringArray(R.array.tab_titles)[position])
         ).attach();
 
+        if (ContextCompat.checkSelfPermission(this,
+                Manifest.permission.RECORD_AUDIO)
+                != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this,
+                    new String[]{Manifest.permission.RECORD_AUDIO},
+                    1234);
+        }
+
         /*FloatingActionButton fab = binding.fab;
 
         fab.setOnClickListener(new View.OnClickListener() {
@@ -54,6 +69,24 @@ public class MainActivity extends FragmentActivity { //AppCompatActivity {
                         .setAction("Action", null).show();
             }
         });*/
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode,
+                                           String permissions[], int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        switch (requestCode) {
+            case 1234: {
+                // If request is cancelled, the result arrays are empty.
+                if (grantResults.length > 0
+                        && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    canRecord = true;
+                } else {
+                    Log.d("MainActivity", "permission denied by user");
+                }
+                return;
+            }
+        }
     }
 
     @Override
@@ -68,21 +101,25 @@ public class MainActivity extends FragmentActivity { //AppCompatActivity {
         }
     }
 
-    /*@Override
+    @Override
     protected void onPause() {
         super.onPause();
-        audioThread.stop_recording();
-        try {
-            audioThread.join();
-        } catch (Exception e) {
-            e.printStackTrace();
+        if(audioThread != null) {
+            audioThread.stop_recording();
+            try {
+                audioThread.join();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
         }
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        audioThread = new AudioThread();
-        audioThread.start();
-    }*/
+        //if(canRecord) {
+            audioThread = new AudioThread();
+            audioThread.start();
+       // }
+    }
 }
