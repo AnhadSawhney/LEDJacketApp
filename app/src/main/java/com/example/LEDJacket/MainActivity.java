@@ -23,10 +23,13 @@ import com.google.android.material.tabs.TabLayoutMediator;
 
 //https://developer.android.com/training/animation/screen-slide-2
 
-public class MainActivity extends FragmentActivity { //AppCompatActivity {
+public class MainActivity extends FragmentActivity {
 
+    private Thread thread;
     private AudioThread audioThread;
     private ActivityMainBinding binding;
+
+    public Middleman middleman = new Middleman(); // THIS MUST BE PASSED TO VISUALIZERFRAGMENT
 
     /**
      * The pager widget, which handles animation and allows swiping horizontally to access previous
@@ -34,7 +37,7 @@ public class MainActivity extends FragmentActivity { //AppCompatActivity {
      */
     private ViewPager2 viewPager;
 
-    boolean canRecord = false;
+    //boolean canRecord = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -43,7 +46,7 @@ public class MainActivity extends FragmentActivity { //AppCompatActivity {
         binding = ActivityMainBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
 
-        SectionsPagerAdapter sectionsPagerAdapter = new SectionsPagerAdapter(this, this); //getSupportFragmentManager()
+        SectionsPagerAdapter sectionsPagerAdapter = new SectionsPagerAdapter(this, this, middleman); //getSupportFragmentManager()
         viewPager = binding.viewPager;
         viewPager.setAdapter(sectionsPagerAdapter);
 
@@ -52,12 +55,10 @@ public class MainActivity extends FragmentActivity { //AppCompatActivity {
                 (tab, position) -> tab.setText(getResources().getStringArray(R.array.tab_titles)[position])
         ).attach();
 
-        if (ContextCompat.checkSelfPermission(this,
-                Manifest.permission.RECORD_AUDIO)
-                != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this,
-                    new String[]{Manifest.permission.RECORD_AUDIO},
-                    1234);
+        // CRASH IF THE USER DOES NOT GRANT AUDIO RECORD PERMISSION
+
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.RECORD_AUDIO}, 1234);
         }
 
         /*FloatingActionButton fab = binding.fab;
@@ -71,7 +72,7 @@ public class MainActivity extends FragmentActivity { //AppCompatActivity {
         });*/
     }
 
-    @Override
+    /*@Override
     public void onRequestPermissionsResult(int requestCode,
                                            String permissions[], int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
@@ -87,7 +88,7 @@ public class MainActivity extends FragmentActivity { //AppCompatActivity {
                 return;
             }
         }
-    }
+    }*/
 
     @Override
     public void onBackPressed() {
@@ -107,7 +108,7 @@ public class MainActivity extends FragmentActivity { //AppCompatActivity {
         if(audioThread != null) {
             audioThread.stop_recording();
             try {
-                audioThread.join();
+                thread.join();
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -118,8 +119,9 @@ public class MainActivity extends FragmentActivity { //AppCompatActivity {
     protected void onResume() {
         super.onResume();
         //if(canRecord) {
-            audioThread = new AudioThread();
-            audioThread.start();
+            audioThread = new AudioThread(middleman);
+            thread = new Thread(audioThread);
+            thread.start();
        // }
     }
 }

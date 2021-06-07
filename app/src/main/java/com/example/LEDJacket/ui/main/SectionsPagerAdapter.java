@@ -8,6 +8,7 @@ import androidx.fragment.app.FragmentActivity;
 //import androidx.fragment.app.FragmentManager;
 import androidx.viewpager2.adapter.FragmentStateAdapter;
 
+import com.example.ledjacket.Middleman;
 import com.example.ledjacket.R;
 
 /**
@@ -20,9 +21,12 @@ public class SectionsPagerAdapter extends FragmentStateAdapter {
 
     private final Context mContext;
 
-    public SectionsPagerAdapter(Context context, FragmentActivity fa) {
+    private Middleman middleman;
+
+    public SectionsPagerAdapter(Context context, FragmentActivity fa, Middleman middleman) {
         super(fa);
         mContext = context;
+        this.middleman = middleman;
     }
 
     @Override
@@ -34,7 +38,9 @@ public class SectionsPagerAdapter extends FragmentStateAdapter {
             case 0:
                 return new AnimationsFragment();
             case 1:
-                return new VisualizerFragment();
+                VisualizerFragment v = new VisualizerFragment();
+                v.setMiddleman(middleman);
+                return v;
             case 2:
             default: //SHOULD NEVER DEFAULT, this means getItemCount is higher than the number of pages
                 return new SettingsFragment();

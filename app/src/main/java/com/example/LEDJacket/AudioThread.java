@@ -14,17 +14,31 @@ import static android.media.AudioFormat.ENCODING_PCM_16BIT;
 
 //COURTESY OF https://github.com/Plasmabot1/Android-Loopback-Oscilloscope
 
-public class AudioThread extends Thread {
+public class AudioThread implements Runnable {
     private volatile static boolean keep_recording = true;
     private volatile static boolean currently_recording = false;
 
-    @Override
+    private Middleman middleman;
+
+    public AudioThread(Middleman middleman) {
+        this.middleman = middleman;
+    }
+
     public void run() {
         int SAMPLE_RATE = 44100; //22050; //11025; //When sample rate does not evenly divide 44.1kHz, slowdown
         int bufferSize = AudioRecord.getMinBufferSize(SAMPLE_RATE, // bufferSize in BYTES
                 CHANNEL_IN_MONO,
                 ENCODING_PCM_16BIT);
-        //bufferSize = bufferSize*2;
+
+        //minbuffersize gives 3584
+
+        // Override buffersize to a power of 2
+        if(4096 < bufferSize) {
+            Log.d("AudioThread","MIN BUFFERSIZE > 4096");
+        } else {
+            bufferSize = 4096;
+        }
+
         AudioRecord record = new AudioRecord(MediaRecorder.AudioSource.DEFAULT,
                 SAMPLE_RATE,
                 CHANNEL_IN_MONO,
@@ -36,13 +50,15 @@ public class AudioThread extends Thread {
         }
         short[] audioBuffer = new short[bufferSize/2]; // each SHORT is 2 BYTES
 
+        float[] oscBuffer = new float[audioBuffer.length];
+
         double[] window = blackman_window(audioBuffer.length);
 
-        double[] fftin = new double[audioBuffer.length];
+        double[] fftData = new double[audioBuffer.length*2];
 
         DoubleFFT_1D dfft = new DoubleFFT_1D(audioBuffer.length);
 
-        double[] fftout = new double[audioBuffer.length];
+        float[] specBuffer = new float[audioBuffer.length];
 
         Log.d("AudioThread",String.format("bufferSize: %d", bufferSize));
 
@@ -58,26 +74,72 @@ public class AudioThread extends Thread {
         while (keep_recording) {
             record.read(audioBuffer, 0, audioBuffer.length); //audioBuffer.length is the number of shorts
 
-            double max = 0;
+            float max = 0;
 
-            //Log.d("AUDIOBUFFER", "arr: " + Arrays.toString(audioBuffer));
+            // Audio buffer contains signed PCM data, from -32767 to + 32767
+            // Visualizers need floats from 0 to 1
+            // Jtransforms FFT needs doubles from -1 to 1, with window applied
+
             for (int i = 0; i < audioBuffer.length /* && audioBuffer[i] == 0 */; i++) {
-                fftin[i] = (double) audioBuffer[i] - 16384.0;
-                if (fftin[i] > max || -fftin[i] > max) {
-                    max = fftin[i];
+                oscBuffer[i] = (float) audioBuffer[i];
+                float test = Math.abs(oscBuffer[i]);
+                if (test > max) {
+                    max = test;
                 }
             }
 
-            //Log.i("NUM_ZEROES:", String.valueOf(ix));
+            //Log.d("AUDIOBUFFER", "arr: " + Arrays.toString(audioBuffer));
             //Log.i("LENGTH:", String.valueOf(audioBuffer.length));
-            // GOOD DATA (no leading 0s) IS BEING SENT TO C++ when array is of size bufferSize/2
-            // when array is of size bufferSize (twice as large as min), more good data is pulled from record
+
+            Arrays.fill(fftData, 0); // Clear fftData (may not be necessary)
 
             for (int i = 0; i < audioBuffer.length; i++) {
-                fftin[i] = fftin[i] * window[i] / max;
+                fftData[i] = (double) (oscBuffer[i] * window[i] / max);
+            }
+            
+            max = max * 2.0f;
+
+            for (int i = 0; i < audioBuffer.length; i++) {
+                oscBuffer[i] = oscBuffer[i] / max + 0.5f;
             }
 
-            //dfft.realForwardFull(fftin);
+            try {
+                middleman.putOscData(oscBuffer);
+            }catch (InterruptedException ex) {
+                Log.e("AudioThread", ex.getMessage());
+            }
+
+            // See http://incanter.org/docs/parallelcolt/api/edu/emory/mathcs/jtransforms/fft/DoubleFFT_1D.html#realForwardFull(double[])
+
+            // Real data in the first half of fftData, zeroes in the second half
+
+            dfft.realForwardFull(fftData);
+
+            max = 0;
+
+            for(int i = 0; i < audioBuffer.length; i++) { // get the magnitude of each value
+                double re = fftData[2*i];
+                double im = fftData[2*i+1];
+                specBuffer[i] = (float) Math.sqrt(re * re + im * im);
+                float test = Math.abs(specBuffer[i]);
+                if (test > max) {
+                    max = test;
+                }
+            }
+
+            for (int i = 0; i < audioBuffer.length; i++) {
+                specBuffer[i] = specBuffer[i] / max;
+            }
+
+            // TODO: resample fft data to log frequency scale
+
+            try {
+                middleman.putSpecData(specBuffer); //Seems like the important part of the spectrum only takes up the first half
+            }catch (InterruptedException ex) {
+                Log.e("AudioThread", ex.getMessage());
+            }
+
+            //Log.d("FFTDATA", "arr: " + Arrays.toString(fftData));
 
         }
         record.stop();

@@ -10,6 +10,7 @@ import android.view.SurfaceView;
 import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
 
+import com.example.ledjacket.Middleman;
 import com.example.ledjacket.SurfaceViewThread;
 import com.example.ledjacket.databinding.FragmentVisualizerBinding;
 
@@ -24,6 +25,12 @@ public class VisualizerFragment extends Fragment {
     private FragmentVisualizerBinding binding;
 
     private Context context;
+
+    private Middleman middleman;
+
+    public void setMiddleman(Middleman middleman) {
+        this.middleman = middleman;
+    }
 
     public static VisualizerFragment newInstance(int index) {
         VisualizerFragment fragment = new VisualizerFragment();
@@ -61,6 +68,10 @@ public class VisualizerFragment extends Fragment {
         final SurfaceViewThread swt1 = (SurfaceViewThread) binding.oscilloscopeSurfaceView;
         final SurfaceViewThread swt2 = (SurfaceViewThread) binding.spectrumSurfaceView;
         final SurfaceViewThread swt3 = (SurfaceViewThread) binding.beatSurfaceView;
+
+        swt1.setMiddleman(middleman);
+        swt2.setMiddleman(middleman);
+        swt3.setMiddleman(middleman);
 
         return root;
     }

@@ -14,15 +14,13 @@ import android.view.SurfaceHolder;
 
 import java.util.logging.Logger;
 
-/**
- * Created by zhaosong on 2018/6/17.
- */
-
 // Courtesy of https://www.dev2qa.com/android-draw-surfaceview-in-thread-example/
 
 public class SurfaceViewThread extends SurfaceView implements SurfaceHolder.Callback, Runnable {
 
     private SurfaceHolder surfaceHolder = null;
+
+    private Middleman middleman;
 
     private Paint paint = null;
 
@@ -64,6 +62,10 @@ public class SurfaceViewThread extends SurfaceView implements SurfaceHolder.Call
         //setBackgroundColor(Color.RED);
     }
 
+    public void setMiddleman(Middleman middleman) {
+        this.middleman = middleman;
+    }
+
     public SurfaceViewThread(Context context) {
         super(context);
         init();
@@ -81,7 +83,6 @@ public class SurfaceViewThread extends SurfaceView implements SurfaceHolder.Call
 
     @Override
     public void surfaceCreated(SurfaceHolder surfaceHolder) {
-
         this.surfaceHolder = surfaceHolder;
 
         if (thread != null)
@@ -117,7 +118,8 @@ public class SurfaceViewThread extends SurfaceView implements SurfaceHolder.Call
             return;
         }
 
-        // resize your UI
+        this.height = height;
+        this.width = width;
     }
 
     @Override
@@ -130,18 +132,18 @@ public class SurfaceViewThread extends SurfaceView implements SurfaceHolder.Call
             Log.d(LOG_TAG, "DrawThread is null");
         }
 
-        /*while (true)
+        while (true)
         {
             try
             {
                 Log.d(LOG_TAG, "Request last frame");
-                drawThread.join(5000);
+                thread.join(5000);
                 break;
             } catch (Exception e)
             {
                 Log.e(LOG_TAG, "Could not join with draw thread");
             }
-        }*/
+        }
 
         thread = null;
 
@@ -153,7 +155,27 @@ public class SurfaceViewThread extends SurfaceView implements SurfaceHolder.Call
     }
 
     private void setWaveData(float[] data) { // Array of floats from 0-1 of undefined length
-        waveData = data;
+        if(data.length > width) {
+            System.arraycopy(data, 0, waveData, 0, width);
+        } else {
+            waveData = data;
+        }
+    }
+
+    private void getDataFromMiddleman() {
+        if(middleman != null && !middleman.isOscEmpty()) {
+            try {
+                float[] data = middleman.getOscData();
+                if(data.length > width) {
+                    waveData = new float[width];
+                    System.arraycopy(data, 0, waveData, 0, width);
+                } else {
+                    waveData = data;
+                }
+            }catch (InterruptedException ex) {
+                Log.e(LOG_TAG, ex.getMessage());
+            }
+        }
     }
 
     private void setRandomData() {
@@ -165,61 +187,60 @@ public class SurfaceViewThread extends SurfaceView implements SurfaceHolder.Call
 
     @Override
     public void run() {
-        while(threadRunning)
-        {
+        while(threadRunning) {
             long startTime = System.currentTimeMillis();
 
-            if (surfaceHolder == null)
-            {
+            if (surfaceHolder == null) {
                 return;
             }
 
             canvas = surfaceHolder.lockCanvas();
 
-            if (canvas == null)
-            {
+            if (canvas == null) {
                 return;
             }
 
-            // clear the screen using black
-            canvas.drawARGB(255, 0, 0, 0);  //test with green
+            getDataFromMiddleman();
 
-            // Your drawing here
-            paint.setColor(Color.RED);
+            if(waveData != null) {
 
-            setRandomData();
+                // clear the screen using black
+                canvas.drawARGB(255, 16, 16, 16);
 
-            float[] points = new float[waveData.length*4+4];
+                // Your drawing here
+                paint.setColor(Color.RED);
 
-            int j = 0;
-            float prevx = 0, prevy = height*(1.0f-waveData[0]);
+                //setRandomData();
 
-            for(int i = 1; i <= waveData.length; i++) {
-                j = i*4;
-                points[j] = prevx;
-                points[j+1] = prevy;
-                points[j+2] = (float)i * width / waveData.length;
-                points[j+3] = height*(1.0f-waveData[i-1]);
-                prevx = points[j+2];
-                prevy = points[j+3];
-            }
+                float[] points = new float[waveData.length * 4];
 
-            canvas.drawLines(points, paint);
+                int j = 0;
+                float prevx = 0, prevy = height * (1.0f - waveData[0]);
 
-            // Send message to main UI thread to update the drawing to the main view special area.
-            surfaceHolder.unlockCanvasAndPost(canvas);
-
-            long deltaTime = System.currentTimeMillis() - startTime;
-
-            if(deltaTime < 16)
-            {
-                try {
-                    Thread.sleep(16 - deltaTime);
-                }catch (InterruptedException ex)
-                {
-                    Log.e(LOG_TAG, ex.getMessage());
+                for (int i = 1; i < waveData.length; i++) {
+                    j = (i - 1) * 4;
+                    points[j] = prevx;
+                    points[j + 1] = prevy;
+                    points[j + 2] = (float) i * width / (waveData.length - 1);
+                    points[j + 3] = height * (1.0f - waveData[i]);
+                    prevx = points[j + 2];
+                    prevy = points[j + 3];
                 }
 
+                canvas.drawLines(points, paint);
+
+                // Send message to main UI thread to update the drawing to the main view special area.
+                surfaceHolder.unlockCanvasAndPost(canvas);
+
+                long deltaTime = System.currentTimeMillis() - startTime;
+
+                if (deltaTime < 33) { // 30 FPS
+                    try {
+                        Thread.sleep(33 - deltaTime);
+                    } catch (InterruptedException ex) {
+                        Log.e(LOG_TAG, ex.getMessage());
+                    }
+                }
             }
         }
     }
