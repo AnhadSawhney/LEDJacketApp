@@ -37,7 +37,7 @@ public class MainActivity extends FragmentActivity {
      */
     private ViewPager2 viewPager;
 
-    //boolean canRecord = false;
+    boolean canRecord = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -50,15 +50,23 @@ public class MainActivity extends FragmentActivity {
         viewPager = binding.viewPager;
         viewPager.setAdapter(sectionsPagerAdapter);
 
+        // Start on visualizer tab
+        viewPager.setCurrentItem(1);
+
         TabLayout tabs = binding.tabs;
         new TabLayoutMediator(tabs, viewPager,
                 (tab, position) -> tab.setText(getResources().getStringArray(R.array.tab_titles)[position])
         ).attach();
 
-        // CRASH IF THE USER DOES NOT GRANT AUDIO RECORD PERMISSION
+        // CRASH IF THE USER DOES NOT GRANT AUDIO RECORD PERMISSION?
 
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.RECORD_AUDIO}, 1234);
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED ||
+                ContextCompat.checkSelfPermission(this, Manifest.permission.MODIFY_AUDIO_SETTINGS) != PackageManager.PERMISSION_GRANTED) {
+
+            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.RECORD_AUDIO, Manifest.permission.MODIFY_AUDIO_SETTINGS}, 1234);
+            canRecord = false;
+        } else {
+            canRecord = true;
         }
 
         /*FloatingActionButton fab = binding.fab;
@@ -72,23 +80,31 @@ public class MainActivity extends FragmentActivity {
         });*/
     }
 
-    /*@Override
-    public void onRequestPermissionsResult(int requestCode,
-                                           String permissions[], int[] grantResults) {
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String permissions[], int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         switch (requestCode) {
             case 1234: {
                 // If request is cancelled, the result arrays are empty.
-                if (grantResults.length > 0
-                        && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                boolean success = true;
+                for(int result : grantResults) {
+                    success &= (result == PackageManager.PERMISSION_GRANTED);
+                }
+
+                if (success) {
                     canRecord = true;
                 } else {
-                    Log.d("MainActivity", "permission denied by user");
+                    canRecord = false;
+                    String msg = "Permissions denied by user:";
+                    for (String per : permissions) {
+                        msg += "\n" + per;
+                    }
+                    Log.d("MainActivity", msg);
                 }
                 return;
             }
         }
-    }*/
+    }
 
     @Override
     public void onBackPressed() {
@@ -118,12 +134,10 @@ public class MainActivity extends FragmentActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        //if(canRecord) {
-        if(audioThread == null) {
+        if(canRecord && audioThread == null) {
             audioThread = new AudioThread(middleman);
             thread = new Thread(audioThread);
             thread.start();
         }
-       // }
     }
 }

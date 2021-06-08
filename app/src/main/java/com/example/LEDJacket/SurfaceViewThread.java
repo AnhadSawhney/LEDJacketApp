@@ -41,7 +41,7 @@ public abstract class SurfaceViewThread extends SurfaceView implements SurfaceHo
 
     protected String LOG_TAG;
 
-    protected volatile float[] waveData;
+    protected float[] waveData;
 
     private void init() {
         //setFocusable(true);
@@ -152,9 +152,11 @@ public abstract class SurfaceViewThread extends SurfaceView implements SurfaceHo
     protected void setWaveData(float[] data) { // Array of floats from 0-1 of undefined length
         if(data.length > width) {
             waveData = new float[width];
-            System.arraycopy(data, 0, waveData, 0, width);
+            System.arraycopy(data, 0, waveData, 0, width); // deep copy
         } else {
             waveData = data;
+            //waveData = new float[data.length];
+            //.arraycopy(data, 0, waveData, 0, data.length);
         }
     }
 
@@ -194,7 +196,7 @@ public abstract class SurfaceViewThread extends SurfaceView implements SurfaceHo
 
                 long deltaTime = System.currentTimeMillis() - startTime;
 
-                if (deltaTime < refreshDelay) { // 30 FPS
+                if (deltaTime < refreshDelay) {
                     try {
                         Thread.sleep(refreshDelay - deltaTime);
                     } catch (InterruptedException ex) {

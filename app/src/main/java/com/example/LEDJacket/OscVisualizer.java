@@ -27,7 +27,7 @@ public class OscVisualizer extends SurfaceViewThread {
         if(middleman != null && !middleman.isOscEmpty()) {
             try {
                 setWaveData(middleman.getOscData());
-            }catch (InterruptedException ex) {
+            } catch (InterruptedException ex) {
                 Log.e(LOG_TAG, ex.getMessage());
             }
         }
@@ -48,7 +48,11 @@ public class OscVisualizer extends SurfaceViewThread {
 
         paint.setColor(Color.argb(255,3, 218, 197));
 
+        // clicks are introduced after this
+
         float[] points = new float[waveData.length * 4];
+
+        // This introduces clicks, when AudioThread is refreshing too fast
 
         int j = 0;
         float prevx = 0, prevy = height * waveData[0];
@@ -58,9 +62,17 @@ public class OscVisualizer extends SurfaceViewThread {
             points[j] = prevx;
             points[j + 1] = prevy;
             points[j + 2] = (float) i * width / (waveData.length - 1);
-            points[j + 3] = height * waveData[i];
+            points[j + 3] = height * waveData[i]; // randomly sets values to 0 or height
             prevx = points[j + 2];
             prevy = points[j + 3];
+        }
+
+        // This removes clicks:
+
+        for(int i = 0; i < waveData.length * 2; i++) {
+            if(points[i*2+1] < 0 || points[i*2+1] > height) {
+                points[i*2+1] = height / 2;
+            }
         }
 
         canvas.drawLines(points, paint);

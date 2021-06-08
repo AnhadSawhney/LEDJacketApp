@@ -57,13 +57,14 @@ public class SpecVisualizer extends SurfaceViewThread {
 
         for (float m : ma) { // VERTICAL LINES
             for (float f : fa) {
-                float x = (float) Math.log((f * m) / 10.766f) / xscale;  // frequency of band k is k * samplerate / window size, in this case 44100 / 4096 = 10.766
+                float x = (float) Math.log((f * m) / 43.066f) / xscale;  // frequency of band k is k * samplerate / window size, in this case 44100 / 1024 = 43.066
                 c.drawLine(x, 0, x, height, paint);
             }
         }
 
-        for (int i = 0; i < height; i += 16) { // HORIZONTAL LINES
-            c.drawLine(0, i, width, i, paint);
+        for (int i = 0; i < 10; i ++) { // HORIZONTAL LINES
+            float y = (float) (Math.sqrt(i/10.0) * height);
+            c.drawLine(0, y, width, y, paint);
         }
     }
 
@@ -120,7 +121,13 @@ public class SpecVisualizer extends SurfaceViewThread {
             // Update last index
             last = index;
 
-            float y = value * height; // TODO: log volume scale?
+            float y;
+
+            if(value < 0 || value > 1) { // Catch clicks
+                y = 0;
+            } else {
+                y = value * height; // sqrt volume scale, happens in audiothread
+            }                          //TODO: move here?
 
             path.lineTo(x, y);
         }
