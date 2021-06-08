@@ -131,7 +131,7 @@ public class AudioThread implements Runnable {
                 specBuffer[i] = specBuffer[i] / max;
             }
 
-            // TODO: resample fft data to log frequency scale
+            // fft data is fit to log frequency scale in the draw function
 
             try {
                 middleman.putSpecData(specBuffer); //Seems like the important part of the spectrum only takes up the first half

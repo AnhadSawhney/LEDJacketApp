@@ -16,31 +16,32 @@ import java.util.logging.Logger;
 
 // Courtesy of https://www.dev2qa.com/android-draw-surfaceview-in-thread-example/
 
-public class SurfaceViewThread extends SurfaceView implements SurfaceHolder.Callback, Runnable {
+// TODO: change from surfaceview to view?
+
+public abstract class SurfaceViewThread extends SurfaceView implements SurfaceHolder.Callback, Runnable {
+
+    private static int refreshDelay = 16; // 60 FPS
 
     private SurfaceHolder surfaceHolder = null;
 
-    private Middleman middleman;
+    protected Middleman middleman;
 
-    private Paint paint = null;
+    protected Paint paint = null;
 
     private Thread thread = null;
 
     // Record whether the child thread is running or not.
     private boolean threadRunning = false;
 
-    //True when the surface is ready to draw
-    private boolean surfaceReady = false;
+    protected Canvas canvas = null;
 
-    private Canvas canvas = null;
+    protected int width = 0;
 
-    private int width = 0;
+    protected int height = 0;
 
-    private int height = 0;
+    protected String LOG_TAG;
 
-    private static String LOG_TAG = "SURFACE_VIEW_THREAD";
-
-    private volatile float[] waveData;
+    protected volatile float[] waveData;
 
     private void init() {
         //setFocusable(true);
@@ -50,16 +51,12 @@ public class SurfaceViewThread extends SurfaceView implements SurfaceHolder.Call
         // Add current object as the callback listener.
         surfaceHolder.addCallback(this);
 
-        // Create the paint object which will draw the text.
+        // Create the paint object which will draw
         paint = new Paint();
-        //paint.setTextSize(100);
-        //paint.setColor(Color.GREEN);
         paint.setAntiAlias(true);
 
         // Set the SurfaceView object at the top of View object.
         setZOrderOnTop(true);
-
-        //setBackgroundColor(Color.RED);
     }
 
     public void setMiddleman(Middleman middleman) {
@@ -104,7 +101,6 @@ public class SurfaceViewThread extends SurfaceView implements SurfaceHolder.Call
 
         // Set flags to true.
         threadRunning = true;
-        surfaceReady = true;
 
         // Get screen width and height.
         height = getHeight();
@@ -151,30 +147,14 @@ public class SurfaceViewThread extends SurfaceView implements SurfaceHolder.Call
         surfaceHolder.getSurface().release();
 
         this.surfaceHolder = null;
-        surfaceReady = false;
     }
 
-    private void setWaveData(float[] data) { // Array of floats from 0-1 of undefined length
+    protected void setWaveData(float[] data) { // Array of floats from 0-1 of undefined length
         if(data.length > width) {
+            waveData = new float[width];
             System.arraycopy(data, 0, waveData, 0, width);
         } else {
             waveData = data;
-        }
-    }
-
-    private void getDataFromMiddleman() {
-        if(middleman != null && !middleman.isOscEmpty()) {
-            try {
-                float[] data = middleman.getOscData();
-                if(data.length > width) {
-                    waveData = new float[width];
-                    System.arraycopy(data, 0, waveData, 0, width);
-                } else {
-                    waveData = data;
-                }
-            }catch (InterruptedException ex) {
-                Log.e(LOG_TAG, ex.getMessage());
-            }
         }
     }
 
@@ -184,6 +164,10 @@ public class SurfaceViewThread extends SurfaceView implements SurfaceHolder.Call
             waveData[i] = (float) Math.random();
         }
     }
+
+    protected abstract void getDataFromMiddleman();
+
+    protected abstract void draw();
 
     @Override
     public void run() {
@@ -203,40 +187,16 @@ public class SurfaceViewThread extends SurfaceView implements SurfaceHolder.Call
             getDataFromMiddleman();
 
             if(waveData != null) {
-
-                // clear the screen using black
-                canvas.drawARGB(255, 16, 16, 16);
-
-                // Your drawing here
-                paint.setColor(Color.RED);
-
-                //setRandomData();
-
-                float[] points = new float[waveData.length * 4];
-
-                int j = 0;
-                float prevx = 0, prevy = height * (1.0f - waveData[0]);
-
-                for (int i = 1; i < waveData.length; i++) {
-                    j = (i - 1) * 4;
-                    points[j] = prevx;
-                    points[j + 1] = prevy;
-                    points[j + 2] = (float) i * width / (waveData.length - 1);
-                    points[j + 3] = height * (1.0f - waveData[i]);
-                    prevx = points[j + 2];
-                    prevy = points[j + 3];
-                }
-
-                canvas.drawLines(points, paint);
+                draw();
 
                 // Send message to main UI thread to update the drawing to the main view special area.
                 surfaceHolder.unlockCanvasAndPost(canvas);
 
                 long deltaTime = System.currentTimeMillis() - startTime;
 
-                if (deltaTime < 33) { // 30 FPS
+                if (deltaTime < refreshDelay) { // 30 FPS
                     try {
-                        Thread.sleep(33 - deltaTime);
+                        Thread.sleep(refreshDelay - deltaTime);
                     } catch (InterruptedException ex) {
                         Log.e(LOG_TAG, ex.getMessage());
                     }

@@ -105,23 +105,25 @@ public class MainActivity extends FragmentActivity {
     @Override
     protected void onPause() {
         super.onPause();
-        if(audioThread != null) {
+        /*if(audioThread != null) {
             audioThread.stop_recording();
             try {
                 thread.join();
             } catch (Exception e) {
                 e.printStackTrace();
             }
-        }
+        }*/
     }
 
     @Override
     protected void onResume() {
         super.onResume();
         //if(canRecord) {
+        if(audioThread == null) {
             audioThread = new AudioThread(middleman);
             thread = new Thread(audioThread);
             thread.start();
+        }
        // }
     }
 }
