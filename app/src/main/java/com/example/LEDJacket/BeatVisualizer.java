@@ -26,7 +26,7 @@ public class BeatVisualizer extends SurfaceViewThread {
     protected void getDataFromMiddleman() {
         if(middleman != null && !middleman.isOscEmpty()) {
             try {
-                setWaveData(middleman.getOscData());
+                setWaveData(middleman.getBeatData());
             }catch (InterruptedException ex) {
                 Log.e(LOG_TAG, ex.getMessage());
             }
@@ -42,13 +42,15 @@ public class BeatVisualizer extends SurfaceViewThread {
         canvas.translate(0, height);
         canvas.scale(1, -1);
 
-        paint.setColor(Color.WHITE);
+        //paint.setColor(Color.WHITE);
 
-        canvas.drawLine(0, height/2, width, height/2, paint);
+        //canvas.drawLine(0, height/2, width, height/2, paint);
 
         paint.setColor(Color.RED);
 
         float[] points = new float[waveData.length * 4];
+
+        // This introduces clicks, when AudioThread is refreshing too fast
 
         int j = 0;
         float prevx = 0, prevy = height * waveData[0];
@@ -58,9 +60,17 @@ public class BeatVisualizer extends SurfaceViewThread {
             points[j] = prevx;
             points[j + 1] = prevy;
             points[j + 2] = (float) i * width / (waveData.length - 1);
-            points[j + 3] = height * waveData[i];
+            points[j + 3] = height * waveData[i]; // randomly sets values to 0 or height
             prevx = points[j + 2];
             prevy = points[j + 3];
+        }
+
+        // This removes clicks:
+
+        for(int i = 0; i < waveData.length * 2; i++) {
+            if(points[i*2+1] < 0 || points[i*2+1] > height) {
+                points[i*2+1] = height / 2;
+            }
         }
 
         canvas.drawLines(points, paint);

@@ -41,7 +41,7 @@ public abstract class SurfaceViewThread extends SurfaceView implements SurfaceHo
 
     protected String LOG_TAG;
 
-    protected float[] waveData;
+    protected volatile float[] waveData;
 
     private void init() {
         //setFocusable(true);
