@@ -26,7 +26,7 @@ public class AudioThread implements Runnable {
 
     private float runningmax;
 
-    private float lastbeat;
+    private PeakDetector peakDetector = new PeakDetector(10, 2, 0);
 
     public AudioThread(Middleman middleman) {
         this.middleman = middleman;
@@ -82,7 +82,8 @@ public class AudioThread implements Runnable {
 
         float[] specBuffer = new float[audioBuffer.length];
 
-        float[] beatBuffer = new float[300]; // TODO: what is a good size?
+        float[] beatDetect = new float[300]; // TODO: what is a good size?
+        float[] beatBuffer = new float[300];
 
         Log.d("AudioThread",String.format("bufferSize: %d", bufferSize));
 
@@ -96,8 +97,6 @@ public class AudioThread implements Runnable {
         //record.startRecording();
         grabAudio.start();
         currently_recording = true;
-
-        lastbeat = 0;
 
         while (keep_recording) {
             long startTime = System.currentTimeMillis();
@@ -152,8 +151,6 @@ public class AudioThread implements Runnable {
                 oscBuffer[i] = oscBuffer[i] / max + 0.5f;
             }
 
-            // clicks are introduced after this
-
             try {
                 middleman.putOscData(oscBuffer);
             }catch (InterruptedException ex) {
@@ -206,18 +203,20 @@ public class AudioThread implements Runnable {
                 Log.e("AudioThread", ex.getMessage());
             }
 
-            for(int i = beatBuffer.length-1; i > 0; i--) {
-                beatBuffer[i] = beatBuffer[i-1];
+            for(int i = beatDetect.length-1; i > 0; i--) {
+                beatDetect[i] = beatDetect[i-1];
             }
 
-            float beat = (tmp[3] + tmp[4] + tmp[5]) / 3.0f; // TODO: bad way of calculating beats
+            float beat = (tmp[3] + tmp[4]) / 2.0f; // TODO: bad way of calculating beats
 
-            beatBuffer[0] = beat;// - lastbeat + 0.5f;
+            beatDetect[0] = peakDetector.run(beat);
 
-            lastbeat = beat;
+
+
+            //beatBuffer[0] = beat - runningavg + 0.5f;
 
             try {
-                middleman.putBeatData(beatBuffer);
+                middleman.putBeatData(beatDetect);
             }catch (InterruptedException ex) {
                 Log.e("AudioThread", ex.getMessage());
             }

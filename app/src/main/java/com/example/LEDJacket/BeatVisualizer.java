@@ -67,11 +67,13 @@ public class BeatVisualizer extends SurfaceViewThread {
 
         // This removes clicks:
 
-        for(int i = 0; i < waveData.length * 2; i++) {
+        // TODO: dont rest pooints to 0
+        
+        /*for(int i = 0; i < waveData.length * 2; i++) {
             if(points[i*2+1] < 0 || points[i*2+1] > height) {
                 points[i*2+1] = height / 2;
             }
-        }
+        }*/
 
         canvas.drawLines(points, paint);
     }
