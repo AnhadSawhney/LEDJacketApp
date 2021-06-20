@@ -1,4 +1,4 @@
-package com.example.ledjacket;
+package com.example.ledjacket.audio;
 
 // Courtesy of Brakel, J.P.G. van (2014). "Robust peak detection algorithm using z-scores".
 // Stack Overflow. Available at:

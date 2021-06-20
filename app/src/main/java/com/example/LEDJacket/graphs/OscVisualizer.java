@@ -1,11 +1,11 @@
-package com.example.ledjacket;
+package com.example.ledjacket.graphs;
 
 import android.content.Context;
 import android.graphics.Color;
 import android.util.AttributeSet;
 import android.util.Log;
 
-public class OscVisualizer extends SurfaceViewThread {
+public class OscVisualizer extends GraphThread {
 
     public OscVisualizer(Context context) {
         super(context);

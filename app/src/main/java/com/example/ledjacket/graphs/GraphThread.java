@@ -1,4 +1,4 @@
-package com.example.ledjacket;
+package com.example.ledjacket.graphs;
 
 import android.content.Context;
 import android.graphics.Canvas;
@@ -12,13 +12,15 @@ import android.util.Log;
 import android.view.SurfaceView;
 import android.view.SurfaceHolder;
 
+import com.example.ledjacket.Middleman;
+
 import java.util.logging.Logger;
 
 // Courtesy of https://www.dev2qa.com/android-draw-surfaceview-in-thread-example/
 
 // TODO: change from surfaceview to view?
 
-public abstract class SurfaceViewThread extends SurfaceView implements SurfaceHolder.Callback, Runnable {
+public abstract class GraphThread extends SurfaceView implements SurfaceHolder.Callback, Runnable {
 
     private static int refreshDelay = 16; // 60 FPS
 
@@ -63,17 +65,17 @@ public abstract class SurfaceViewThread extends SurfaceView implements SurfaceHo
         this.middleman = middleman;
     }
 
-    public SurfaceViewThread(Context context) {
+    public GraphThread(Context context) {
         super(context);
         init();
     }
 
-    public SurfaceViewThread(Context context, AttributeSet attrs) {
+    public GraphThread(Context context, AttributeSet attrs) {
         super(context, attrs);
         init();
     }
 
-    public SurfaceViewThread(Context context, AttributeSet attrs, int defStyle) {
+    public GraphThread(Context context, AttributeSet attrs, int defStyle) {
         super(context, attrs, defStyle);
         init();
     }

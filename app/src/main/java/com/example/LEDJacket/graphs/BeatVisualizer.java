@@ -1,11 +1,11 @@
-package com.example.ledjacket;
+package com.example.ledjacket.graphs;
 
 import android.content.Context;
 import android.graphics.Color;
 import android.util.AttributeSet;
 import android.util.Log;
 
-public class BeatVisualizer extends SurfaceViewThread {
+public class BeatVisualizer extends GraphThread {
 
     public BeatVisualizer(Context context) {
         super(context);
@@ -67,7 +67,7 @@ public class BeatVisualizer extends SurfaceViewThread {
 
         // This removes clicks:
 
-        // TODO: dont rest pooints to 0
+        // TODO: dont reset points to 0
         
         /*for(int i = 0; i < waveData.length * 2; i++) {
             if(points[i*2+1] < 0 || points[i*2+1] > height) {

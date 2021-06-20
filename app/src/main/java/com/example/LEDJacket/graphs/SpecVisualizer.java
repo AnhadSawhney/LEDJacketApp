@@ -1,4 +1,4 @@
-package com.example.ledjacket;
+package com.example.ledjacket.graphs;
 
 import android.content.Context;
 import android.graphics.Bitmap;
@@ -11,7 +11,7 @@ import android.util.Log;
 
 // Courtesy of https://github.com/billthefarmer/scope/blob/2963e0e1b4ad8a68b81a6a1253b9b81dea8ba15e/src/main/java/org/billthefarmer/scope/Spectrum.java
 
-public class SpecVisualizer extends SurfaceViewThread {
+public class SpecVisualizer extends GraphThread {
     private Bitmap graticule;
 
     private Path path;

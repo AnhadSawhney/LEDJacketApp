@@ -1,17 +1,16 @@
-package com.example.ledjacket.ui.main;
+package com.example.ledjacket.ui;
 
 import android.content.Context;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.SurfaceView;
 
 import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
 
 import com.example.ledjacket.Middleman;
-import com.example.ledjacket.SurfaceViewThread;
+import com.example.ledjacket.graphs.GraphThread;
 import com.example.ledjacket.databinding.FragmentVisualizerBinding;
 
 /**
@@ -65,9 +64,9 @@ public class VisualizerFragment extends Fragment {
 
         //AUDIOTHREAD CALLS A CALLBACK FUNCTION FROM EACH OF THESE THREADS TO FEED THEM NEW DATA AND FORCE THEM TO DRAW AGAIN
         //THAT WAY THEY UPDATE WHENEVER THE AUDIOTHREAD IS READY
-        final SurfaceViewThread swt1 = (SurfaceViewThread) binding.oscilloscopeSurfaceView;
-        final SurfaceViewThread swt2 = (SurfaceViewThread) binding.spectrumSurfaceView;
-        final SurfaceViewThread swt3 = (SurfaceViewThread) binding.beatSurfaceView;
+        final GraphThread swt1 = (GraphThread) binding.oscilloscopeSurfaceView;
+        final GraphThread swt2 = (GraphThread) binding.spectrumSurfaceView;
+        final GraphThread swt3 = (GraphThread) binding.beatSurfaceView;
 
         swt1.setMiddleman(middleman);
         swt2.setMiddleman(middleman);

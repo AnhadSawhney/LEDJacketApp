@@ -27,7 +27,7 @@
             android:text="@string/viz_1"
             android:textColor="?attr/colorSecondary" />
 
-        <com.example.ledjacket.OscVisualizer
+        <com.example.ledjacket.graphs.OscVisualizer
             android:id="@+id/oscilloscopeSurfaceView"
             android:layout_width="match_parent"
             android:layout_height="80dp" />
@@ -39,7 +39,7 @@
             android:text="@string/viz_2"
             android:textColor="?attr/colorSecondary" />
 
-        <com.example.ledjacket.SpecVisualizer
+        <com.example.ledjacket.graphs.SpecVisualizer
             android:id="@+id/spectrumSurfaceView"
             android:layout_width="match_parent"
             android:layout_height="80dp" />
@@ -51,7 +51,7 @@
             android:text="@string/viz_3"
             android:textColor="?attr/colorSecondary" />
 
-        <com.example.ledjacket.BeatVisualizer
+        <com.example.ledjacket.graphs.BeatVisualizer
             android:id="@+id/beatSurfaceView"
             android:layout_width="match_parent"
             android:layout_height="80dp" />

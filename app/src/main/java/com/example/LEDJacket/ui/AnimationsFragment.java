@@ -1,4 +1,4 @@
-package com.example.ledjacket.ui.main;
+package com.example.ledjacket.ui;
 
 import android.content.Context;
 import android.graphics.Bitmap;

@@ -1,16 +1,13 @@
-package com.example.ledjacket;
+package com.example.ledjacket.audio;
 
-import android.media.AudioRecord;
-import android.media.MediaRecorder;
 import android.os.SystemClock;
 import android.util.Log;
+
+import com.example.ledjacket.Middleman;
 
 import org.jtransforms.fft.DoubleFFT_1D;
 
 import java.util.Arrays;
-
-import static android.media.AudioFormat.CHANNEL_IN_MONO;
-import static android.media.AudioFormat.ENCODING_PCM_16BIT;
 
 //COURTESY OF https://github.com/Plasmabot1/Android-Loopback-Oscilloscope
 

@@ -4,9 +4,9 @@ import android.Manifest;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.util.Log;
-import android.widget.GridView;
 
 //import com.google.android.material.floatingactionbutton.FloatingActionButton;
+import com.example.ledjacket.audio.AudioThread;
 import com.google.android.material.tabs.TabLayout;
 
 //import androidx.viewpager.widget.ViewPager;
@@ -16,8 +16,7 @@ import androidx.core.content.ContextCompat;
 import androidx.fragment.app.FragmentActivity;
 import androidx.viewpager2.widget.ViewPager2;
 
-import com.example.ledjacket.ui.main.SectionsPagerAdapter;
-import com.example.ledjacket.AudioThread;
+import com.example.ledjacket.ui.SectionsPagerAdapter;
 import com.example.ledjacket.databinding.ActivityMainBinding;
 import com.google.android.material.tabs.TabLayoutMediator;
 

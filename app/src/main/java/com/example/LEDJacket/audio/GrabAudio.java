@@ -16,7 +16,7 @@
 
 // Courtesy of https://forum.xda-developers.com/t/live-wallpaper-deadmau5-audio-visualizer-v1-4.1250390/
 
-package com.example.ledjacket;
+package com.example.ledjacket.audio;
 
 import java.lang.reflect.Method;
 import java.util.Arrays;
