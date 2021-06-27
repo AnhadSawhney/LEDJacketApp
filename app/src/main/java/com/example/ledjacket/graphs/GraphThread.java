@@ -22,7 +22,7 @@ import java.util.logging.Logger;
 
 public abstract class GraphThread extends SurfaceView implements SurfaceHolder.Callback, Runnable {
 
-    private static int refreshDelay = 16; // 60 FPS
+    private static final int refreshDelay = 16; // 60 FPS
 
     private SurfaceHolder surfaceHolder = null;
 

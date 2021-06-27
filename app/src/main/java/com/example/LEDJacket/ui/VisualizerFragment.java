@@ -66,6 +66,9 @@ public class VisualizerFragment extends Fragment {
 
         //AUDIOTHREAD CALLS A CALLBACK FUNCTION FROM EACH OF THESE THREADS TO FEED THEM NEW DATA AND FORCE THEM TO DRAW AGAIN
         //THAT WAY THEY UPDATE WHENEVER THE AUDIOTHREAD IS READY
+
+        // NONE OF THE VISUALIZATIONS CAN EXTEND VIEW BECAUSE IT STOPS UPDATING PERIODICALLY
+
         final GraphThread swt1 = (GraphThread) binding.oscilloscopeSurfaceView;
         final GraphThread swt2 = (GraphThread) binding.spectrumSurfaceView;
         final GraphThread swt3 = (GraphThread) binding.beatSurfaceView;

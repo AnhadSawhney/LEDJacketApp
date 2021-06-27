@@ -66,7 +66,7 @@ import java.nio.FloatBuffer;
 @RequiresApi(api = Build.VERSION_CODES.JELLY_BEAN_MR2)
 public class VideoThread implements Runnable {
     private static final String LOG_TAG = "VideoThread";
-    private static final boolean VERBOSE = true; // lots of logging
+    private static final boolean VERBOSE = false; // lots of logging
     private static final int saveWidth = 640;
     private static final int saveHeight = 480;
     private static final int TIMEOUT_USEC = 10000;
@@ -96,14 +96,6 @@ public class VideoThread implements Runnable {
     public VideoThread(Context context) {
         this.context = context;
         mainBitmap = Bitmap.createBitmap(saveWidth, saveHeight, Bitmap.Config.ARGB_8888);
-
-        // SET FILE MUST BE CALLED IN RUN FOR SOME GODFORSAKEN REASON
-
-        /*try {
-            setFile("null"); // TODO: set default animation to play
-        } catch (Throwable ex) {
-            Log.e(LOG_TAG, ex.getMessage()); //TODO: bad? handle this exception?
-        }*/
         start();
     }
 
@@ -172,6 +164,9 @@ public class VideoThread implements Runnable {
 
     @Override
     public void run() {
+        // TODO: video playback starts slowing down after lots of loops!!!!!!!!
+
+        // SET FILE MUST BE CALLED IN RUN FOR SOME GODFORSAKEN REASON
         try {
             setFile("null"); // TODO: set default animation to play
         } catch (Throwable ex) {
@@ -182,49 +177,52 @@ public class VideoThread implements Runnable {
         MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
 
         int inputChunk = 0;
-        int decodeCount = 0;
+        //int decodeCount = 0;
         //long frameSaveTime = 0;
 
         boolean outputDone = false;
-        boolean inputDone = false;
+        //boolean inputDone = false;
 
         while (keep_looping) {
             //if (VERBOSE) Log.d(LOG_TAG, "Loop"); // NOISY
 
             // Feed more data to the decoder.
-            if (!inputDone) {
-                int inputBufIndex = decoder.dequeueInputBuffer(TIMEOUT_USEC);
-                if (inputBufIndex >= 0) {
-                    ByteBuffer inputBuf = decoderInputBuffers[inputBufIndex];
-                    // Read the sample data into the ByteBuffer.  This neither respects nor
-                    // updates inputBuf's position, limit, etc.
-                    int chunkSize = extractor.readSampleData(inputBuf, 0);
-                    if (chunkSize < 0) {
-                        // End of stream -- send empty frame with EOS flag set.
-                        decoder.queueInputBuffer(inputBufIndex, 0, 0, 0L, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
-                        inputDone = true;
-                        //extractor.seekTo(0, MediaExtractor.SEEK_TO_CLOSEST_SYNC); // Go back to beginning
-                        if (VERBOSE) Log.d(LOG_TAG, "sent input EOS");
-                    } else {
-                        if (extractor.getSampleTrackIndex() != trackIndex) {
-                            Log.w(LOG_TAG, "WEIRD: got sample from track " + extractor.getSampleTrackIndex() + ", expected " + trackIndex);
-                        }
-                        long presentationTimeUs = extractor.getSampleTime();
-                        decoder.queueInputBuffer(inputBufIndex, 0, chunkSize, presentationTimeUs, 0);
-                        if (VERBOSE) {
-                            Log.d(LOG_TAG, "submitted frame " + inputChunk + " to dec, size=" +
-                                    chunkSize);
-                        }
-                        inputChunk++;
-                        extractor.advance();
-                    }
-                } else {
-                    if (VERBOSE) Log.d(LOG_TAG, "input buffer not available");
+            //if (!inputDone) { // input is never done, because vide file loops
+            int inputBufIndex = decoder.dequeueInputBuffer(TIMEOUT_USEC);
+            if (inputBufIndex >= 0) {
+                ByteBuffer inputBuf = decoderInputBuffers[inputBufIndex];
+                // Read the sample data into the ByteBuffer.  This neither respects nor
+                // updates inputBuf's position, limit, etc.
+
+                int chunkSize = extractor.readSampleData(inputBuf, 0);
+                if (chunkSize < 0) { // readSampleData returns -1 if no more samples are available
+                    // End of stream -- send empty frame with EOS flag set.
+                    //decoder.queueInputBuffer(inputBufIndex, 0, 0, 0L, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
+                    //inputDone = true;
+                    //if (VERBOSE) Log.d(LOG_TAG, "sent input EOS");
+
+                    if (VERBOSE) Log.d(LOG_TAG, "Input EOS, go back to beginning");
+                    extractor.seekTo(0, MediaExtractor.SEEK_TO_CLOSEST_SYNC); // Go back to beginning
+                    chunkSize = extractor.readSampleData(inputBuf, 0);
+                    inputChunk = 0;
                 }
+
+                if (extractor.getSampleTrackIndex() != trackIndex) {
+                    Log.w(LOG_TAG, "WEIRD: got sample from track " + extractor.getSampleTrackIndex() + ", expected " + trackIndex);
+                }
+
+                long presentationTimeUs = extractor.getSampleTime();
+                decoder.queueInputBuffer(inputBufIndex, 0, chunkSize, presentationTimeUs, 0);
+                if (VERBOSE) Log.d(LOG_TAG, "submitted frame " + inputChunk + " to dec, size=" + chunkSize);
+                inputChunk++;
+                extractor.advance();
+            } else {
+                if (VERBOSE) Log.d(LOG_TAG, "input buffer not available");
             }
+            //}
 
             if (!outputDone) {
-                int decoderStatus = decoder.dequeueOutputBuffer(info, TIMEOUT_USEC);
+                int decoderStatus = decoder.dequeueOutputBuffer(info, TIMEOUT_USEC); // decoderStatus should hold index of a buffer
 
                 if (decoderStatus == MediaCodec.INFO_TRY_AGAIN_LATER) {
                     // no output available yet
@@ -239,12 +237,11 @@ public class VideoThread implements Runnable {
                     Log.e(LOG_TAG,"unexpected result from decoder.dequeueOutputBuffer: " + decoderStatus);
                     //decoder.reset(); // requires API 21
                     // FAIL
-                } else { // decoderStatus >= 0
-                    if (VERBOSE) Log.d(LOG_TAG, "surface decoder given buffer " + decoderStatus +
-                            " (size=" + info.size + ")");
+                } else { // decoderStatus >= 0, so valid index of buffer
+                    if (VERBOSE) Log.d(LOG_TAG, "surface decoder given buffer " + decoderStatus + " (size=" + info.size + ")");
                     if ((info.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
                         if (VERBOSE) Log.d(LOG_TAG, "output EOS");
-                        //decoder.flush();
+                        decoder.flush(); // reset decoder state
                         outputDone = true;
                     }
 
@@ -261,7 +258,11 @@ public class VideoThread implements Runnable {
                         outputSurface.drawImage(true);
 
                         outputSurface.putFrameOnBitmap(mainBitmap);
+                    } else {
+                        if (VERBOSE) Log.d(LOG_TAG, "rendering skipped");
                     }
+
+                    // TODO: sleeping to slow down frame generation, and SPEED RAMP?
 
                     //decoder.flush(); // RESTART
                 }
@@ -321,6 +322,10 @@ public class VideoThread implements Runnable {
 
     public Bitmap getMainBitmap() {
         return mainBitmap;
+    }
+
+    public SurfaceTexture getMainTexture() {
+        return outputSurface.mSurfaceTexture;
     }
 
     public Bitmap getDataBitmap() {

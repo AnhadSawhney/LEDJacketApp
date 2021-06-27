@@ -12,7 +12,7 @@ import java.util.Arrays;
 //COURTESY OF https://github.com/Plasmabot1/Android-Loopback-Oscilloscope
 
 public class AudioThread implements Runnable {
-    private static int refreshDelay = 16; // 60 FPS
+    private static final int refreshDelay = 16; // 60 FPS
 
     private volatile static boolean keep_recording;
     private volatile static boolean currently_recording = false;
