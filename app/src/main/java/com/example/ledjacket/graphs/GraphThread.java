@@ -84,15 +84,12 @@ public abstract class GraphThread extends SurfaceView implements SurfaceHolder.C
     public void surfaceCreated(SurfaceHolder surfaceHolder) {
         this.surfaceHolder = surfaceHolder;
 
-        if (thread != null)
-        {
+        if (thread != null) {
             Log.d(LOG_TAG, "draw thread still active");
             // Set thread running flag to true.
-            try
-            {
+            try {
                 thread.join();
-            } catch (InterruptedException e)
-            { // do nothing
+            } catch (InterruptedException e) { // do nothing
             }
         } else {
             // Create the child thread when SurfaceView is created.
@@ -111,8 +108,7 @@ public abstract class GraphThread extends SurfaceView implements SurfaceHolder.C
 
     @Override
     public void surfaceChanged(SurfaceHolder surfaceHolder, int format, int width, int height) {
-        if (width == 0 || height == 0)
-        {
+        if (width == 0 || height == 0) {
             return;
         }
 
@@ -130,15 +126,12 @@ public abstract class GraphThread extends SurfaceView implements SurfaceHolder.C
             Log.d(LOG_TAG, "DrawThread is null");
         }
 
-        while (true)
-        {
-            try
-            {
+        while (true) {
+            try {
                 Log.d(LOG_TAG, "Request last frame");
                 thread.join(5000);
                 break;
-            } catch (Exception e)
-            {
+            } catch (Exception e) {
                 Log.e(LOG_TAG, "Could not join with draw thread");
             }
         }

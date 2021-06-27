@@ -3,6 +3,7 @@ package com.example.ledjacket.ui;
 import android.content.Context;
 import android.os.Bundle;
 import android.view.LayoutInflater;
+import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
 
@@ -12,6 +13,7 @@ import androidx.fragment.app.Fragment;
 import com.example.ledjacket.Middleman;
 import com.example.ledjacket.graphs.GraphThread;
 import com.example.ledjacket.databinding.FragmentVisualizerBinding;
+import com.example.ledjacket.video.BitmapView;
 
 /**
  * A placeholder fragment containing a simple view.
@@ -71,6 +73,20 @@ public class VisualizerFragment extends Fragment {
         swt1.setMiddleman(middleman);
         swt2.setMiddleman(middleman);
         swt3.setMiddleman(middleman);
+
+        final TextureView mainView = binding.textureView;
+        final BitmapView outputView = binding.dataView;
+
+        // Courtesy of https://stackoverflow.com/questions/56064248/android-camerax-doesnt-show-anything
+        // https://stackoverflow.com/questions/34638101/cannot-setsurfacetexture-to-a-released-surfacetexture
+
+        //ViewGroup parent = (ViewGroup) mainView.getParent();
+        //parent.removeView(mainView);
+        //parent.addView(mainView, 0);
+
+        //mainView.setSurfaceTexture(middleman.getVideoThread().getMainTexture());
+
+        outputView.setBitmap(middleman.getVideoThread().getDataBitmap());
 
         return root;
     }

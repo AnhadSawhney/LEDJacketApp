@@ -7,6 +7,7 @@ import android.util.Log;
 
 //import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.example.ledjacket.audio.AudioThread;
+import com.example.ledjacket.video.VideoThread;
 import com.google.android.material.tabs.TabLayout;
 
 //import androidx.viewpager.widget.ViewPager;
@@ -24,8 +25,9 @@ import com.google.android.material.tabs.TabLayoutMediator;
 
 public class MainActivity extends FragmentActivity {
 
-    private Thread thread;
     private AudioThread audioThread;
+    private VideoThread videoThread;
+
     private ActivityMainBinding binding;
 
     public Middleman middleman = new Middleman(); // THIS MUST BE PASSED TO VISUALIZERFRAGMENT
@@ -37,6 +39,8 @@ public class MainActivity extends FragmentActivity {
     private ViewPager2 viewPager;
 
     boolean canRecord = false;
+
+    boolean canRead = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -68,41 +72,44 @@ public class MainActivity extends FragmentActivity {
             canRecord = true;
         }
 
-        /*FloatingActionButton fab = binding.fab;
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED ||
+                ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
 
-        fab.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                Snackbar.make(view, "Replace with your own action", Snackbar.LENGTH_LONG)
-                        .setAction("Action", null).show();
-            }
-        });*/
+            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE}, 5678);
+            canRead = false;
+        } else {
+            canRead = true;
+        }
     }
 
     @Override
     public void onRequestPermissionsResult(int requestCode, String permissions[], int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         switch (requestCode) {
-            case 1234: {
-                // If request is cancelled, the result arrays are empty.
-                boolean success = true;
-                for(int result : grantResults) {
-                    success &= (result == PackageManager.PERMISSION_GRANTED);
-                }
-
-                if (success) {
-                    canRecord = true;
-                } else {
-                    canRecord = false;
-                    String msg = "Permissions denied by user:";
-                    for (String per : permissions) {
-                        msg += "\n" + per;
-                    }
-                    Log.d("MainActivity", msg);
-                }
+            case 1234:
+                canRecord = checkPermissionResult(permissions, grantResults);
                 return;
-            }
+            case 5678:
+                canRead = checkPermissionResult(permissions, grantResults);
+                return;
         }
+    }
+
+    private boolean checkPermissionResult(String permissions[], int[] grantResults) {
+        // If request is cancelled, the result arrays are empty.
+        boolean success = true;
+        for(int result : grantResults) {
+            success &= (result == PackageManager.PERMISSION_GRANTED);
+        }
+
+        if (!success) {
+            String msg = "Permissions denied by user:";
+            for (String per : permissions) {
+                msg += "\n" + per;
+            }
+            Log.d("MainActivity", msg);
+        }
+        return success;
     }
 
     @Override
@@ -120,23 +127,37 @@ public class MainActivity extends FragmentActivity {
     @Override
     protected void onPause() {
         super.onPause();
+
+        // UNCOMMENT THIS TO STOP THREADS RUNNING IN BACKGROUND
+
         /*if(audioThread != null) {
-            audioThread.stop_recording();
-            try {
-                thread.join();
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
+            audioThread.stop();
+        }*/
+
+        /*if(videoThread != null) {
+            videoThread.stop();
         }*/
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        if(canRecord && audioThread == null) {
-            audioThread = new AudioThread(middleman);
-            thread = new Thread(audioThread);
-            thread.start();
+
+        if(canRecord) {
+            if(audioThread == null) {
+                audioThread = new AudioThread(middleman);
+            } else {
+                audioThread.start();
+            }
+        }
+
+        if(canRead) {
+            if (videoThread == null) {
+                videoThread = new VideoThread(this);
+                middleman.setVideoThread(videoThread); // In order to send images to visualizerFragment
+            } else {
+                videoThread.start();
+            }
         }
     }
 }

@@ -1,24 +1,11 @@
-/*
- * Copyright 2013 The Android Open Source Project
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+package com.example.ledjacket.video;
 
-package com.example.ledjacket;
-
+import android.content.Context;
+import android.content.res.AssetFileDescriptor;
 import android.graphics.Bitmap;
 import android.graphics.SurfaceTexture;
 import android.media.MediaCodec;
+import android.media.MediaCodecInfo;
 import android.media.MediaExtractor;
 import android.media.MediaFormat;
 import android.opengl.EGL14;
@@ -29,16 +16,17 @@ import android.opengl.EGLSurface;
 import android.opengl.GLES11Ext;
 import android.opengl.GLES20;
 import android.opengl.Matrix;
-import android.os.Environment;
-import android.test.AndroidTestCase;
+import android.os.Build;
+import android.os.SystemClock;
 import android.util.Log;
 import android.view.Surface;
 
-import java.io.BufferedOutputStream;
+import androidx.annotation.RequiresApi;
+
+import com.example.ledjacket.BuildConfig;
+import com.example.ledjacket.R;
+
 import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
@@ -49,7 +37,21 @@ import java.nio.FloatBuffer;
 //20140123: correct error checks on glGet*Location() and program creation (they don't set error)
 //20140212: eliminate byte swap
 
-//COURTESY OF https://bigflake.com/mediacodec/#ExtractMpegFramesTest
+// COURTESY OF https://bigflake.com/mediacodec/#ExtractMpegFramesTest
+// https://stackoverflow.com/questions/19754547/mediacodec-get-all-frames-from-video
+// https://www.sisik.eu/blog/android/media/video-to-grayscale
+// https://stackoverflow.com/questions/34986857/processing-frames-from-mediacodec-output-and-update-the-frames-on-android
+// https://gist.github.com/salememd/e78bb82559585239ee6f9128b10913a4
+
+// Make imagereader fast: https://stackoverflow.com/questions/29965725/imagereader-in-android-needs-too-long-time-for-one-frame-to-be-available
+
+// VIDEO FRAMES MUST BE EXTRACTED TO BITMAP THEN PASSED TO COMPUTE / FRAGMENT SHADER
+// THIS IS SO THAT SOMETHING ELSE (LIKE OSCILLOSCOPE) CAN BE DRAWN TO A BITMAP AND PROCESSED IN THE SAME WAY
+
+// MediaMetadataRetriever.getFrameAtTime is VERY SLOW (200ms/frame) SEE: https://stackoverflow.com/questions/56791589/how-to-get-frame-by-frame-from-mp4-mediacodec
+
+// TODO: pass texture to fragment shader https://stackoverflow.com/questions/10398965/passing-textures-to-shader
+// TODO: render to multiple textures https://stackoverflow.com/questions/50393858/multiple-texture-output-data-in-fragment-shader
 
 /**
  * Extract frames from an MP4 using MediaExtractor, MediaCodec, and GLES.  Put a .mp4 file
@@ -60,55 +62,28 @@ import java.nio.FloatBuffer;
  * (This was derived from bits and pieces of CTS tests, and is packaged as such, but is not
  * currently part of CTS.)
  */
-public class ExtractMpegFramesTest extends AndroidTestCase {
-    private static final String TAG = "ExtractMpegFramesTest";
-    private static final boolean VERBOSE = false;           // lots of logging
 
-    // where to find files (note: requires WRITE_EXTERNAL_STORAGE permission)
-    private static final File FILES_DIR = Environment.getExternalStorageDirectory();
-    private static final String INPUT_FILE = "source.mp4";
-    private static final int MAX_FRAMES = 10;       // stop extracting after this many
+@RequiresApi(api = Build.VERSION_CODES.JELLY_BEAN_MR2)
+public class VideoThread implements Runnable {
+    private static final String LOG_TAG = "VideoThread";
+    private static final boolean VERBOSE = true; // lots of logging
+    private static final int saveWidth = 640;
+    private static final int saveHeight = 480;
+    private static final int TIMEOUT_USEC = 10000;
 
-    /** test entry point */
-    public void testExtractMpegFrames() throws Throwable {
-        ExtractMpegFramesWrapper.runTest(this);
-    }
+    private volatile static boolean keep_looping;
 
-    /**
-     * Wraps extractMpegFrames().  This is necessary because SurfaceTexture will try to use
-     * the looper in the current thread if one exists, and the CTS tests create one on the
-     * test thread.
-     *
-     * The wrapper propagates exceptions thrown by the worker thread back to the caller.
-     */
-    private static class ExtractMpegFramesWrapper implements Runnable {
-        private Throwable mThrowable;
-        private ExtractMpegFramesTest mTest;
+    private final Context context;
 
-        private ExtractMpegFramesWrapper(ExtractMpegFramesTest test) {
-            mTest = test;
-        }
+    private int trackIndex;
 
-        @Override
-        public void run() {
-            try {
-                mTest.extractMpegFrames();
-            } catch (Throwable th) {
-                mThrowable = th;
-            }
-        }
+    private MediaCodec decoder = null;
+    private CodecOutputSurface outputSurface = null;
+    private MediaExtractor extractor = null;
 
-        /** Entry point. */
-        public static void runTest(ExtractMpegFramesTest obj) throws Throwable {
-            ExtractMpegFramesWrapper wrapper = new ExtractMpegFramesWrapper(obj);
-            Thread th = new Thread(wrapper, "codec test");
-            th.start();
-            th.join();
-            if (wrapper.mThrowable != null) {
-                throw wrapper.mThrowable;
-            }
-        }
-    }
+    private Thread thread;
+
+    private Bitmap mainBitmap;
 
     /**
      * Tests extraction from an MP4 to a series of PNG files.
@@ -118,103 +93,103 @@ public class ExtractMpegFramesTest extends AndroidTestCase {
      * it by adjusting the GL viewport to get letterboxing or pillarboxing, but generally if
      * you're extracting frames you don't want black bars.
      */
-    private void extractMpegFrames() throws IOException {
-        MediaCodec decoder = null;
-        CodecOutputSurface outputSurface = null;
-        MediaExtractor extractor = null;
-        int saveWidth = 640;
-        int saveHeight = 480;
+    public VideoThread(Context context) {
+        this.context = context;
+        mainBitmap = Bitmap.createBitmap(saveWidth, saveHeight, Bitmap.Config.ARGB_8888);
 
+        // SET FILE MUST BE CALLED IN RUN FOR SOME GODFORSAKEN REASON
+
+        /*try {
+            setFile("null"); // TODO: set default animation to play
+        } catch (Throwable ex) {
+            Log.e(LOG_TAG, ex.getMessage()); //TODO: bad? handle this exception?
+        }*/
+        start();
+    }
+
+    // COURTESY OF https://stackoverflow.com/questions/24030756/mediaextractor-mediametadataretriever-with-raw-asset-file
+    public void setFile(String filename) throws Throwable {
+        //File inputFile = new File(FILES_DIR, INPUT_FILE);   // must be an absolute path
+
+        //TODO: put files somewhere other than res/raw (in external storage outside of apk)
+
+        int id = context.getResources().getIdentifier(filename,"raw", BuildConfig.APPLICATION_ID);
+        id = R.raw.wrmmm_beeple; // OVERRIDE, for testing
+
+        // The MediaExtractor error messages aren't very useful.  Check to see if the input
+        // file exists so we can throw a better one if it's not there.
+        /*if (!inputFile.canRead()) {
+            throw new FileNotFoundException("Unable to read " + inputFile);
+        }*/
+
+        AssetFileDescriptor afd = context.getResources().openRawResourceFd(id);
+
+        extractor = new MediaExtractor();
+        extractor.setDataSource(afd.getFileDescriptor(),afd.getStartOffset(),afd.getLength());
+
+        //extractor.setDataSource(inputFile.toString());
+
+        trackIndex = findTrack(extractor);
+        if (trackIndex < 0) {
+            throw new RuntimeException("No video track found in " + filename); //inputFile);
+        }
+        extractor.selectTrack(trackIndex);
+
+        MediaFormat format = extractor.getTrackFormat(trackIndex);
+        if (VERBOSE) {
+            Log.d(LOG_TAG, "Video size is " + format.getInteger(MediaFormat.KEY_WIDTH) + "x" +
+                    format.getInteger(MediaFormat.KEY_HEIGHT));
+        }
+
+        // Could use width/height from the MediaFormat to get full-size frames.
+        outputSurface = new CodecOutputSurface(saveWidth, saveHeight);
+
+        // Create a MediaCodec decoder, and configure it with the MediaFormat from the
+        // extractor.  It's very important to use the format from the extractor because
+        // it contains a copy of the CSD-0/CSD-1 codec-specific data chunks.
+        String mime = format.getString(MediaFormat.KEY_MIME);
+        decoder = MediaCodec.createDecoderByType(mime);
+        decoder.configure(format, outputSurface.getSurface(), null, 0);
+
+        if(VERBOSE) {
+            MediaCodecInfo info = decoder.getCodecInfo();
+            Log.d(LOG_TAG, "Decoder Codec Info:");
+            Log.d(LOG_TAG, "Name: " + info.getName());
+            if(info.isHardwareAccelerated()) {
+                Log.d(LOG_TAG, "Hardware accelerated");
+            }
+            Log.d(LOG_TAG, "Type: " + mime);
+        }
+
+        decoder.start();
+    }
+
+    public void start() {
+        keep_looping = true;
+        thread = new Thread(this);
+        thread.start();
+    }
+
+    @Override
+    public void run() {
         try {
-            File inputFile = new File(FILES_DIR, INPUT_FILE);   // must be an absolute path
-            // The MediaExtractor error messages aren't very useful.  Check to see if the input
-            // file exists so we can throw a better one if it's not there.
-            if (!inputFile.canRead()) {
-                throw new FileNotFoundException("Unable to read " + inputFile);
-            }
-
-            extractor = new MediaExtractor();
-            extractor.setDataSource(inputFile.toString());
-            int trackIndex = selectTrack(extractor);
-            if (trackIndex < 0) {
-                throw new RuntimeException("No video track found in " + inputFile);
-            }
-            extractor.selectTrack(trackIndex);
-
-            MediaFormat format = extractor.getTrackFormat(trackIndex);
-            if (VERBOSE) {
-                Log.d(TAG, "Video size is " + format.getInteger(MediaFormat.KEY_WIDTH) + "x" +
-                        format.getInteger(MediaFormat.KEY_HEIGHT));
-            }
-
-            // Could use width/height from the MediaFormat to get full-size frames.
-            outputSurface = new CodecOutputSurface(saveWidth, saveHeight);
-
-            // Create a MediaCodec decoder, and configure it with the MediaFormat from the
-            // extractor.  It's very important to use the format from the extractor because
-            // it contains a copy of the CSD-0/CSD-1 codec-specific data chunks.
-            String mime = format.getString(MediaFormat.KEY_MIME);
-            decoder = MediaCodec.createDecoderByType(mime);
-            decoder.configure(format, outputSurface.getSurface(), null, 0);
-            decoder.start();
-
-            doExtract(extractor, trackIndex, decoder, outputSurface);
-        } finally {
-            // release everything we grabbed
-            if (outputSurface != null) {
-                outputSurface.release();
-                outputSurface = null;
-            }
-            if (decoder != null) {
-                decoder.stop();
-                decoder.release();
-                decoder = null;
-            }
-            if (extractor != null) {
-                extractor.release();
-                extractor = null;
-            }
-        }
-    }
-
-    /**
-     * Selects the video track, if any.
-     *
-     * @return the track index, or -1 if no video track is found.
-     */
-    private int selectTrack(MediaExtractor extractor) {
-        // Select the first video track we find, ignore the rest.
-        int numTracks = extractor.getTrackCount();
-        for (int i = 0; i < numTracks; i++) {
-            MediaFormat format = extractor.getTrackFormat(i);
-            String mime = format.getString(MediaFormat.KEY_MIME);
-            if (mime.startsWith("video/")) {
-                if (VERBOSE) {
-                    Log.d(TAG, "Extractor selected track " + i + " (" + mime + "): " + format);
-                }
-                return i;
-            }
+            setFile("null"); // TODO: set default animation to play
+        } catch (Throwable ex) {
+            Log.e(LOG_TAG, ex.getMessage()); //TODO: bad? handle this exception?
         }
 
-        return -1;
-    }
-
-    /**
-     * Work loop.
-     */
-    static void doExtract(MediaExtractor extractor, int trackIndex, MediaCodec decoder,
-            CodecOutputSurface outputSurface) throws IOException {
-        final int TIMEOUT_USEC = 10000;
         ByteBuffer[] decoderInputBuffers = decoder.getInputBuffers();
         MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
+
         int inputChunk = 0;
         int decodeCount = 0;
-        long frameSaveTime = 0;
+        //long frameSaveTime = 0;
 
         boolean outputDone = false;
         boolean inputDone = false;
-        while (!outputDone) {
-            if (VERBOSE) Log.d(TAG, "loop");
+
+        while (keep_looping) {
+            //if (VERBOSE) Log.d(LOG_TAG, "Loop"); // NOISY
 
             // Feed more data to the decoder.
             if (!inputDone) {
@@ -226,48 +201,50 @@ public class ExtractMpegFramesTest extends AndroidTestCase {
                     int chunkSize = extractor.readSampleData(inputBuf, 0);
                     if (chunkSize < 0) {
                         // End of stream -- send empty frame with EOS flag set.
-                        decoder.queueInputBuffer(inputBufIndex, 0, 0, 0L,
-                                MediaCodec.BUFFER_FLAG_END_OF_STREAM);
+                        decoder.queueInputBuffer(inputBufIndex, 0, 0, 0L, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
                         inputDone = true;
-                        if (VERBOSE) Log.d(TAG, "sent input EOS");
+                        //extractor.seekTo(0, MediaExtractor.SEEK_TO_CLOSEST_SYNC); // Go back to beginning
+                        if (VERBOSE) Log.d(LOG_TAG, "sent input EOS");
                     } else {
                         if (extractor.getSampleTrackIndex() != trackIndex) {
-                            Log.w(TAG, "WEIRD: got sample from track " +
-                                    extractor.getSampleTrackIndex() + ", expected " + trackIndex);
+                            Log.w(LOG_TAG, "WEIRD: got sample from track " + extractor.getSampleTrackIndex() + ", expected " + trackIndex);
                         }
                         long presentationTimeUs = extractor.getSampleTime();
-                        decoder.queueInputBuffer(inputBufIndex, 0, chunkSize,
-                                presentationTimeUs, 0 /*flags*/);
+                        decoder.queueInputBuffer(inputBufIndex, 0, chunkSize, presentationTimeUs, 0);
                         if (VERBOSE) {
-                            Log.d(TAG, "submitted frame " + inputChunk + " to dec, size=" +
+                            Log.d(LOG_TAG, "submitted frame " + inputChunk + " to dec, size=" +
                                     chunkSize);
                         }
                         inputChunk++;
                         extractor.advance();
                     }
                 } else {
-                    if (VERBOSE) Log.d(TAG, "input buffer not available");
+                    if (VERBOSE) Log.d(LOG_TAG, "input buffer not available");
                 }
             }
 
             if (!outputDone) {
                 int decoderStatus = decoder.dequeueOutputBuffer(info, TIMEOUT_USEC);
+
                 if (decoderStatus == MediaCodec.INFO_TRY_AGAIN_LATER) {
                     // no output available yet
-                    if (VERBOSE) Log.d(TAG, "no output from decoder available");
+                    if (VERBOSE) Log.d(LOG_TAG, "no output from decoder available");
                 } else if (decoderStatus == MediaCodec.INFO_OUTPUT_BUFFERS_CHANGED) {
                     // not important for us, since we're using Surface
-                    if (VERBOSE) Log.d(TAG, "decoder output buffers changed");
+                    if (VERBOSE) Log.d(LOG_TAG, "decoder output buffers changed");
                 } else if (decoderStatus == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
                     MediaFormat newFormat = decoder.getOutputFormat();
-                    if (VERBOSE) Log.d(TAG, "decoder output format changed: " + newFormat);
+                    if (VERBOSE) Log.d(LOG_TAG, "decoder output format changed: " + newFormat);
                 } else if (decoderStatus < 0) {
-                    fail("unexpected result from decoder.dequeueOutputBuffer: " + decoderStatus);
+                    Log.e(LOG_TAG,"unexpected result from decoder.dequeueOutputBuffer: " + decoderStatus);
+                    //decoder.reset(); // requires API 21
+                    // FAIL
                 } else { // decoderStatus >= 0
-                    if (VERBOSE) Log.d(TAG, "surface decoder given buffer " + decoderStatus +
+                    if (VERBOSE) Log.d(LOG_TAG, "surface decoder given buffer " + decoderStatus +
                             " (size=" + info.size + ")");
                     if ((info.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
-                        if (VERBOSE) Log.d(TAG, "output EOS");
+                        if (VERBOSE) Log.d(LOG_TAG, "output EOS");
+                        //decoder.flush();
                         outputDone = true;
                     }
 
@@ -278,29 +255,77 @@ public class ExtractMpegFramesTest extends AndroidTestCase {
                     // that the texture will be available before the call returns, so we
                     // need to wait for the onFrameAvailable callback to fire.
                     decoder.releaseOutputBuffer(decoderStatus, doRender);
+
                     if (doRender) {
-                        if (VERBOSE) Log.d(TAG, "awaiting decode of frame " + decodeCount);
                         outputSurface.awaitNewImage();
                         outputSurface.drawImage(true);
 
-                        if (decodeCount < MAX_FRAMES) {
-                            File outputFile = new File(FILES_DIR,
-                                    String.format("frame-%02d.png", decodeCount));
-                            long startWhen = System.nanoTime();
-                            outputSurface.saveFrame(outputFile.toString());
-                            frameSaveTime += System.nanoTime() - startWhen;
-                        }
-                        decodeCount++;
+                        outputSurface.putFrameOnBitmap(mainBitmap);
                     }
+
+                    //decoder.flush(); // RESTART
                 }
             }
         }
 
-        int numSaved = (MAX_FRAMES < decodeCount) ? MAX_FRAMES : decodeCount;
-        Log.d(TAG, "Saving " + numSaved + " frames took " +
-            (frameSaveTime / numSaved / 1000) + " us per frame");
+        if (VERBOSE) Log.d(LOG_TAG, "Done looping");
+
+        // release everything we grabbed
+        if (outputSurface != null) {
+            outputSurface.release();
+            outputSurface = null;
+        }
+
+        if (decoder != null) {
+            decoder.stop();
+            decoder.release();
+            decoder = null;
+        }
+
+        if (extractor != null) {
+            extractor.release();
+            extractor = null;
+        }
     }
 
+    public void stop() {
+        keep_looping = false;
+        try {
+            thread.join();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * Selects the video track, if any.
+     * @return the track index, or -1 if no video track is found.
+     */
+    private int findTrack(MediaExtractor extractor) {
+        // Select the first video track we find, ignore the rest.
+        int numTracks = extractor.getTrackCount();
+        for (int i = 0; i < numTracks; i++) {
+            MediaFormat format = extractor.getTrackFormat(i);
+            String mime = format.getString(MediaFormat.KEY_MIME);
+            if (mime.startsWith("video/")) {
+                if (VERBOSE) Log.d(LOG_TAG, "Extractor selected track " + i + " (" + mime + "): " + format);
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    // TODO: the main image should be a surfaceTexture not a Bitmap, and shown via a Textureview
+    // This means making OpenGL stop rendering to a PBUFFER and instead use the regular pipeline for images that are displayed
+
+    public Bitmap getMainBitmap() {
+        return mainBitmap;
+    }
+
+    public Bitmap getDataBitmap() {
+        return mainBitmap;
+    }
 
     /**
      * Holds state associated with a Surface used for MediaCodec decoder output.
@@ -309,13 +334,14 @@ public class ExtractMpegFramesTest extends AndroidTestCase {
      * and then create a Surface for that SurfaceTexture.  The Surface can be passed to
      * MediaCodec.configure() to receive decoder output.  When a frame arrives, we latch the
      * texture with updateTexImage(), then render the texture with GL to a pbuffer.
+     *
+     * Creates a Surface that can be passed to MediaCodec.configure().
      * <p>
      * By default, the Surface will be using a BufferQueue in asynchronous mode, so we
      * can potentially drop frames.
      */
-    private static class CodecOutputSurface
-            implements SurfaceTexture.OnFrameAvailableListener {
-        private ExtractMpegFramesTest.STextureRender mTextureRender;
+    private static class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListener {
+        private VideoThread.STextureRender mTextureRender;
         private SurfaceTexture mSurfaceTexture;
         private Surface mSurface;
 
@@ -351,10 +377,10 @@ public class ExtractMpegFramesTest extends AndroidTestCase {
          * Creates interconnected instances of TextureRender, SurfaceTexture, and Surface.
          */
         private void setup() {
-            mTextureRender = new ExtractMpegFramesTest.STextureRender();
+            mTextureRender = new VideoThread.STextureRender();
             mTextureRender.surfaceCreated();
 
-            if (VERBOSE) Log.d(TAG, "textureID=" + mTextureRender.getTextureId());
+            if (VERBOSE) Log.d(LOG_TAG, "textureID=" + mTextureRender.getTextureId());
             mSurfaceTexture = new SurfaceTexture(mTextureRender.getTextureId());
 
             // This doesn't work if this object is created on the thread that CTS started for
@@ -396,14 +422,16 @@ public class ExtractMpegFramesTest extends AndroidTestCase {
                     EGL14.EGL_GREEN_SIZE, 8,
                     EGL14.EGL_BLUE_SIZE, 8,
                     EGL14.EGL_ALPHA_SIZE, 8,
+                    EGL14.EGL_DEPTH_SIZE, 0, // new
+                    EGL14.EGL_STENCIL_SIZE, 0, // new
                     EGL14.EGL_RENDERABLE_TYPE, EGL14.EGL_OPENGL_ES2_BIT,
                     EGL14.EGL_SURFACE_TYPE, EGL14.EGL_PBUFFER_BIT,
                     EGL14.EGL_NONE
             };
+
             EGLConfig[] configs = new EGLConfig[1];
             int[] numConfigs = new int[1];
-            if (!EGL14.eglChooseConfig(mEGLDisplay, attribList, 0, configs, 0, configs.length,
-                    numConfigs, 0)) {
+            if (!EGL14.eglChooseConfig(mEGLDisplay, attribList, 0, configs, 0, configs.length, numConfigs, 0)) {
                 throw new RuntimeException("unable to find RGB888+recordable ES2 EGL config");
             }
 
@@ -412,8 +440,7 @@ public class ExtractMpegFramesTest extends AndroidTestCase {
                     EGL14.EGL_CONTEXT_CLIENT_VERSION, 2,
                     EGL14.EGL_NONE
             };
-            mEGLContext = EGL14.eglCreateContext(mEGLDisplay, configs[0], EGL14.EGL_NO_CONTEXT,
-                    attrib_list, 0);
+            mEGLContext = EGL14.eglCreateContext(mEGLDisplay, configs[0], EGL14.EGL_NO_CONTEXT, attrib_list, 0);
             checkEglError("eglCreateContext");
             if (mEGLContext == null) {
                 throw new RuntimeException("null context");
@@ -479,6 +506,8 @@ public class ExtractMpegFramesTest extends AndroidTestCase {
          * with the EGLContext that contains the GL texture object used by SurfaceTexture.)
          */
         public void awaitNewImage() {
+            if(VERBOSE) Log.d(LOG_TAG, "Waiting for new image");
+
             final int TIMEOUT_MS = 2500;
 
             synchronized (mFrameSyncObject) {
@@ -501,6 +530,9 @@ public class ExtractMpegFramesTest extends AndroidTestCase {
 
             // Latch the data.
             mTextureRender.checkGlError("before updateTexImage");
+
+            //Log.d(LOG_TAG, mEGLDisplay.toString());
+
             mSurfaceTexture.updateTexImage();
         }
 
@@ -516,7 +548,7 @@ public class ExtractMpegFramesTest extends AndroidTestCase {
         // SurfaceTexture callback
         @Override
         public void onFrameAvailable(SurfaceTexture st) {
-            if (VERBOSE) Log.d(TAG, "new frame available");
+            if (VERBOSE) Log.d(LOG_TAG, "new frame available");
             synchronized (mFrameSyncObject) {
                 if (mFrameAvailable) {
                     throw new RuntimeException("mFrameAvailable already set, frame could be dropped");
@@ -529,7 +561,7 @@ public class ExtractMpegFramesTest extends AndroidTestCase {
         /**
          * Saves the current frame to disk as a PNG image.
          */
-        public void saveFrame(String filename) throws IOException {
+        /*public void saveFrame(String filename) throws IOException {
             // glReadPixels gives us a ByteBuffer filled with what is essentially big-endian RGBA
             // data (i.e. a byte of red, followed by a byte of green...).  To use the Bitmap
             // constructor that takes an int[] array with pixel data, we need an int[] filled
@@ -564,7 +596,7 @@ public class ExtractMpegFramesTest extends AndroidTestCase {
 
             mPixelBuf.rewind();
             GLES20.glReadPixels(0, 0, mWidth, mHeight, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE,
-                mPixelBuf);
+                    mPixelBuf);
 
             BufferedOutputStream bos = null;
             try {
@@ -578,8 +610,17 @@ public class ExtractMpegFramesTest extends AndroidTestCase {
                 if (bos != null) bos.close();
             }
             if (VERBOSE) {
-                Log.d(TAG, "Saved " + mWidth + "x" + mHeight + " frame as '" + filename + "'");
+                Log.d(LOG_TAG, "Saved " + mWidth + "x" + mHeight + " frame as '" + filename + "'");
             }
+        }*/
+
+        // TODO: speedup? https://vec.io/posts/faster-alternatives-to-glreadpixels-and-glteximage2d-in-opengl-es
+
+        public void putFrameOnBitmap(Bitmap bmp) { // Bitmap must have Bitmap.Config.ARGB_8888, mWidth, mHeight
+            mPixelBuf.rewind();
+            GLES20.glReadPixels(0, 0, mWidth, mHeight, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, mPixelBuf);
+            //Bitmap bmp = Bitmap.createBitmap(mWidth, mHeight, Bitmap.Config.ARGB_8888);
+            bmp.copyPixelsFromBuffer(mPixelBuf);
         }
 
         /**
@@ -603,34 +644,34 @@ public class ExtractMpegFramesTest extends AndroidTestCase {
         private static final int TRIANGLE_VERTICES_DATA_POS_OFFSET = 0;
         private static final int TRIANGLE_VERTICES_DATA_UV_OFFSET = 3;
         private final float[] mTriangleVerticesData = {
-                // X, Y, Z, U, V
-                -1.0f, -1.0f, 0, 0.f, 0.f,
-                 1.0f, -1.0f, 0, 1.f, 0.f,
-                -1.0f,  1.0f, 0, 0.f, 1.f,
-                 1.0f,  1.0f, 0, 1.f, 1.f,
+            // X, Y, Z, U, V
+            -1.0f, -1.0f, 0, 0.f, 0.f,
+            1.0f, -1.0f, 0, 1.f, 0.f,
+            -1.0f,  1.0f, 0, 0.f, 1.f,
+            1.0f,  1.0f, 0, 1.f, 1.f,
         };
 
         private FloatBuffer mTriangleVertices;
 
         private static final String VERTEX_SHADER =
-                "uniform mat4 uMVPMatrix;\n" +
-                "uniform mat4 uSTMatrix;\n" +
-                "attribute vec4 aPosition;\n" +
-                "attribute vec4 aTextureCoord;\n" +
-                "varying vec2 vTextureCoord;\n" +
-                "void main() {\n" +
-                "    gl_Position = uMVPMatrix * aPosition;\n" +
-                "    vTextureCoord = (uSTMatrix * aTextureCoord).xy;\n" +
-                "}\n";
+            "uniform mat4 uMVPMatrix;\n" +
+            "uniform mat4 uSTMatrix;\n" +
+            "attribute vec4 aPosition;\n" +
+            "attribute vec4 aTextureCoord;\n" +
+            "varying vec2 vTextureCoord;\n" +
+            "void main() {\n" +
+            "    gl_Position = uMVPMatrix * aPosition;\n" +
+            "    vTextureCoord = (uSTMatrix * aTextureCoord).xy;\n" +
+            "}\n";
 
         private static final String FRAGMENT_SHADER =
-                "#extension GL_OES_EGL_image_external : require\n" +
-                "precision mediump float;\n" +      // highp here doesn't seem to matter
-                "varying vec2 vTextureCoord;\n" +
-                "uniform samplerExternalOES sTexture;\n" +
-                "void main() {\n" +
-                "    gl_FragColor = texture2D(sTexture, vTextureCoord);\n" +
-                "}\n";
+            "#extension GL_OES_EGL_image_external : require\n" +
+            "precision mediump float;\n" +      // highp here doesn't seem to matter
+            "varying vec2 vTextureCoord;\n" +
+            "uniform samplerExternalOES sTexture;\n" + // This texture is the video frame
+            "void main() {\n" +
+            "    gl_FragColor = texture2D(sTexture, vTextureCoord);\n" + // get the pixel from the video frame in the position vTextureCoord
+            "}\n";
 
         private float[] mMVPMatrix = new float[16];
         private float[] mSTMatrix = new float[16];
@@ -643,6 +684,7 @@ public class ExtractMpegFramesTest extends AndroidTestCase {
         private int maTextureHandle;
 
         public STextureRender() {
+            // Put triangle vertices data into bytebuffer to send to GLES
             mTriangleVertices = ByteBuffer.allocateDirect(
                     mTriangleVerticesData.length * FLOAT_SIZE_BYTES)
                     .order(ByteOrder.nativeOrder()).asFloatBuffer();
@@ -759,8 +801,8 @@ public class ExtractMpegFramesTest extends AndroidTestCase {
             int[] compiled = new int[1];
             GLES20.glGetShaderiv(shader, GLES20.GL_COMPILE_STATUS, compiled, 0);
             if (compiled[0] == 0) {
-                Log.e(TAG, "Could not compile shader " + shaderType + ":");
-                Log.e(TAG, " " + GLES20.glGetShaderInfoLog(shader));
+                Log.e(LOG_TAG, "Could not compile shader " + shaderType + ":");
+                Log.e(LOG_TAG, " " + GLES20.glGetShaderInfoLog(shader));
                 GLES20.glDeleteShader(shader);
                 shader = 0;
             }
@@ -779,7 +821,7 @@ public class ExtractMpegFramesTest extends AndroidTestCase {
 
             int program = GLES20.glCreateProgram();
             if (program == 0) {
-                Log.e(TAG, "Could not create program");
+                Log.e(LOG_TAG, "Could not create program");
             }
             GLES20.glAttachShader(program, vertexShader);
             checkGlError("glAttachShader");
@@ -789,8 +831,8 @@ public class ExtractMpegFramesTest extends AndroidTestCase {
             int[] linkStatus = new int[1];
             GLES20.glGetProgramiv(program, GLES20.GL_LINK_STATUS, linkStatus, 0);
             if (linkStatus[0] != GLES20.GL_TRUE) {
-                Log.e(TAG, "Could not link program: ");
-                Log.e(TAG, GLES20.glGetProgramInfoLog(program));
+                Log.e(LOG_TAG, "Could not link program: ");
+                Log.e(LOG_TAG, GLES20.glGetProgramInfoLog(program));
                 GLES20.glDeleteProgram(program);
                 program = 0;
             }
@@ -800,7 +842,7 @@ public class ExtractMpegFramesTest extends AndroidTestCase {
         public void checkGlError(String op) {
             int error;
             while ((error = GLES20.glGetError()) != GLES20.GL_NO_ERROR) {
-                Log.e(TAG, op + ": glError " + error);
+                Log.e(LOG_TAG, op + ": glError " + error);
                 throw new RuntimeException(op + ": glError " + error);
             }
         }

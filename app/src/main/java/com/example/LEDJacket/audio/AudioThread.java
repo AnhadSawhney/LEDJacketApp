@@ -14,7 +14,7 @@ import java.util.Arrays;
 public class AudioThread implements Runnable {
     private static int refreshDelay = 16; // 60 FPS
 
-    private volatile static boolean keep_recording = true;
+    private volatile static boolean keep_recording;
     private volatile static boolean currently_recording = false;
 
     private GrabAudio grabAudio;
@@ -25,10 +25,31 @@ public class AudioThread implements Runnable {
 
     private PeakDetector peakDetector = new PeakDetector(10, 2, 0);
 
+    private Thread thread;
+
     public AudioThread(Middleman middleman) {
         this.middleman = middleman;
+        start();
     }
 
+    public void start() {
+        if(!currently_recording) {
+            keep_recording = true;
+            thread = new Thread(this);
+            thread.start();
+        }
+    }
+
+    public void stop() {
+        keep_recording = false;
+        try {
+            thread.join();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    @Override
     public void run() {
         /*int SAMPLE_RATE = 44100; //22050; //11025; //When sample rate does not evenly divide 44.1kHz, slowdown
         int bufferSize = AudioRecord.getMinBufferSize(SAMPLE_RATE, // bufferSize in BYTES
@@ -84,8 +105,9 @@ public class AudioThread implements Runnable {
 
         Log.d("AudioThread",String.format("bufferSize: %d", bufferSize));
 
-        while (currently_recording) {
-            Log.d("AudioThread","currently recoring, waiting 50ms before attempting again");
+        while (currently_recording) { // AudioRecord has not yet shut down
+            // In start function, there must be a check that new threads don't get created when currently_recording = true
+            Log.d("AudioThread","currently recoring, exiting immediately");
             // bufferSize is usually worth 80ms of audio
             // So waiting 50ms - this means, next attempt to grab AudioRecord will succeed.
             SystemClock.sleep(50);
@@ -150,7 +172,7 @@ public class AudioThread implements Runnable {
 
             try {
                 middleman.putOscData(oscBuffer);
-            }catch (InterruptedException ex) {
+            } catch (InterruptedException ex) {
                 Log.e("AudioThread", ex.getMessage());
             }
 
@@ -234,10 +256,6 @@ public class AudioThread implements Runnable {
         grabAudio.release();
         grabAudio = null;
         currently_recording = false;
-    }
-
-    public void stop_recording() {
-        keep_recording = false;
     }
 
     private double[] blackman_window(int length) {

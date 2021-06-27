@@ -2,12 +2,18 @@ package com.example.ledjacket;
 
 // Used to pass data from AudioThread to SurfaceViewThreads
 
+import com.example.ledjacket.video.VideoThread;
+
 public class Middleman {
     private float[] oscData;
     private float[] specData;
     private float[] beatData;
+    
+    private VideoThread videoThread = null;
 
     public Middleman() {}
+
+    // Synchronized not really necessary here because there is only one thread calling put(), and one thread calling each get()
 
     public synchronized void putOscData(float[] oscData) throws InterruptedException {
         this.oscData = oscData;
@@ -46,5 +52,13 @@ public class Middleman {
 
     public boolean isbeatEmpty(){
         return oscData == null;
+    }
+
+    public VideoThread getVideoThread() {
+        return videoThread;
+    }
+
+    public void setVideoThread(VideoThread videoThread) {
+        this.videoThread = videoThread;
     }
 }

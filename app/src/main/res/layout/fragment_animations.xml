@@ -6,7 +6,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:verticalScrollbarPosition="left"
-    tools:context=".ui.main.AnimationsFragment">
+    tools:context=".ui.AnimationsFragment">
 
     <!-- android:numColumns="auto_fit" -->
     <GridView
