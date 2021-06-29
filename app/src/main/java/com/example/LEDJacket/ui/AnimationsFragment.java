@@ -96,6 +96,8 @@ public class AnimationsFragment extends Fragment {
         return root;
     }
 
+    // TODO: make thumbnails, https://stackoverflow.com/questions/32517124/how-to-create-a-video-thumbnail-from-a-video-file-path-in-android
+
     // Prepare some dummy data for gridview
     private ArrayList<ImageItem> getData() {
         final ArrayList<ImageItem> imageItems = new ArrayList<>();

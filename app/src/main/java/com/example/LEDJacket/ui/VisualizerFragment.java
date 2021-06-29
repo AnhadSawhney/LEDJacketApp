@@ -77,19 +77,11 @@ public class VisualizerFragment extends Fragment {
         swt2.setMiddleman(middleman);
         swt3.setMiddleman(middleman);
 
-        final TextureView mainView = binding.textureView;
-        final BitmapView outputView = binding.dataView;
+        final BitmapView mainView = binding.mainView;
+        final BitmapView dataView = binding.dataView;
 
-        // Courtesy of https://stackoverflow.com/questions/56064248/android-camerax-doesnt-show-anything
-        // https://stackoverflow.com/questions/34638101/cannot-setsurfacetexture-to-a-released-surfacetexture
-
-        //ViewGroup parent = (ViewGroup) mainView.getParent();
-        //parent.removeView(mainView);
-        //parent.addView(mainView, 0);
-
-        //mainView.setSurfaceTexture(middleman.getVideoThread().getMainTexture());
-
-        outputView.setBitmap(middleman.getVideoThread().getDataBitmap());
+        mainView.setBitmap(middleman.getVideoThread().getMainBitmap());
+        dataView.setBitmap(middleman.getVideoThread().getDataBitmap());
 
         return root;
     }

@@ -12,6 +12,8 @@ import android.view.View;
 
 import com.example.ledjacket.Middleman;
 
+// TODO: Sync with choreographer
+
 public class BitmapView extends SurfaceView implements SurfaceHolder.Callback, Runnable {
 
     private static final int refreshDelay = 32; // 30 FPS
@@ -152,6 +154,7 @@ public class BitmapView extends SurfaceView implements SurfaceHolder.Callback, R
             }
 
             float aspectRatio = bmp.getWidth() / (float) bmp.getHeight();
+            // Filter: false - nearest neighbor, true - bilinear
             scaledbmp = Bitmap.createScaledBitmap(bmp, width, Math.round(width / aspectRatio), false);
 
             canvas.drawBitmap(scaledbmp, 0, 0, null);
@@ -160,6 +163,7 @@ public class BitmapView extends SurfaceView implements SurfaceHolder.Callback, R
             surfaceHolder.unlockCanvasAndPost(canvas);
 
             long deltaTime = System.currentTimeMillis() - startTime;
+            //Log.d(LOG_TAG, "Loop took: (ms) " + deltaTime);
 
             if (deltaTime < refreshDelay) {
                 try {
