@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.res.AssetFileDescriptor;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.drawable.Drawable;
 import android.media.MediaCodec;
@@ -57,6 +58,7 @@ import java.nio.ByteBuffer;
 public class VideoThread implements Runnable {
     private static final String LOG_TAG = "VideoThread";
     private static final boolean VERBOSE = false; // lots of logging
+    // TODO: get size from map, also crop
     private static final int saveWidth = 640;
     private static final int saveHeight = 360;
     private static final int TIMEOUT_USEC = 10000;
@@ -96,7 +98,9 @@ public class VideoThread implements Runnable {
 
         //TODO: put files somewhere other than res/raw (in external storage outside of apk)
 
-        int id = context.getResources().getIdentifier(filename,"raw", BuildConfig.APPLICATION_ID);
+        Resources resources = context.getResources();
+
+        int id = resources.getIdentifier(filename,"raw", BuildConfig.APPLICATION_ID);
         id = R.raw.wrmmm_beeple; // OVERRIDE, for testing
 
         // The MediaExtractor error messages aren't very useful.  Check to see if the input
@@ -105,7 +109,7 @@ public class VideoThread implements Runnable {
             throw new FileNotFoundException("Unable to read " + inputFile);
         }*/
 
-        AssetFileDescriptor afd = context.getResources().openRawResourceFd(id);
+        AssetFileDescriptor afd = resources.openRawResourceFd(id);
 
         extractor = new MediaExtractor();
         extractor.setDataSource(afd.getFileDescriptor(),afd.getStartOffset(),afd.getLength());
@@ -124,8 +128,12 @@ public class VideoThread implements Runnable {
                     format.getInteger(MediaFormat.KEY_HEIGHT));
         }
 
+        Bitmap bitmap = BitmapFactory.decodeResource(resources, R.drawable.map);
+
         // Could use width/height from the MediaFormat to get full-size frames.
-        outputSurface = new CodecOutputSurface(saveWidth, saveHeight);
+        outputSurface = new CodecOutputSurface(saveWidth, saveHeight, bitmap);
+
+        bitmap.recycle();
 
         // Create a MediaCodec decoder, and configure it with the MediaFormat from the
         // extractor.  It's very important to use the format from the extractor because
@@ -325,66 +333,5 @@ public class VideoThread implements Runnable {
 
     public Bitmap getDataBitmap() {
         return mainBitmap;
-    }
-
-    // COURTESY OF: https://gamedev.stackexchange.com/questions/10829/loading-png-textures-for-use-in-android-opengl-es1
-
-    /**
-     * Create a texture from a given resource
-     *
-     * @param resourceID the ID of the resource to be loaded
-    // * @param scaleToPO2 determines whether the image should be scaled up to the next highest power
-     * of two, or whether it should be "inset" into such an image. Having textures that are
-     * dimensions of some power-of-two is critical for performance in opengl.
-     */
-    public void loadGLTextureFromResource(int resourceID) { //}, boolean scaleToPO2 ) {
-
-        // pull in the resource
-        Bitmap bitmap = null;
-        Resources resources = context.getResources();
-
-        Drawable image = resources.getDrawable( resourceID );
-        float density = resources.getDisplayMetrics().density;
-
-        int originalWidth = (int)(image.getIntrinsicWidth() / density);
-        int originalHeight = (int)(image.getIntrinsicHeight() / density);
-
-        int powWidth = getNextHighestPO2( originalWidth );
-        int powHeight = getNextHighestPO2( originalHeight );
-
-        //if ( scaleToPO2 ) {
-        //    image.setBounds( 0, 0, powWidth, powHeight );
-        //} else {
-            image.setBounds( 0, 0, originalWidth, originalHeight );
-        //}
-
-        // Create an empty, mutable bitmap
-        bitmap = Bitmap.createBitmap( powWidth, powHeight, Bitmap.Config.ARGB_8888 );
-        // get a canvas to paint over the bitmap
-        Canvas canvas = new Canvas( bitmap );
-        bitmap.eraseColor(0);
-
-        image.draw( canvas ); // draw the image onto our bitmap
-
-        outputSurface.loadGLTextureFromBitmap(bitmap);
-
-        bitmap.recycle();
-    }
-
-    /**
-     * Calculates the next highest power of two for a given integer.
-     *
-     * @param n the number
-     * @return a power of two equal to or higher than n
-     */
-    public static int getNextHighestPO2( int n ) {
-        n -= 1;
-        n = n | (n >> 1);
-        n = n | (n >> 2);
-        n = n | (n >> 4);
-        n = n | (n >> 8);
-        n = n | (n >> 16);
-        n = n | (n >> 32);
-        return n + 1;
     }
 }

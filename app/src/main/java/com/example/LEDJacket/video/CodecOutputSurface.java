@@ -1,6 +1,7 @@
 package com.example.ledjacket.video;
 
 import android.graphics.Bitmap;
+import android.graphics.Canvas;
 import android.graphics.SurfaceTexture;
 import android.opengl.EGL14;
 import android.opengl.EGLConfig;
@@ -40,11 +41,13 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
     private SurfaceTexture mSurfaceTexture;
     private Surface mSurface;
 
+    private static Bitmap map;
+
     private EGLDisplay mEGLDisplay = EGL14.EGL_NO_DISPLAY;
     private EGLContext mEGLContext = EGL14.EGL_NO_CONTEXT;
     private EGLSurface mEGLSurface = EGL14.EGL_NO_SURFACE;
-    int mWidth;
-    int mHeight;
+    static int mWidth;
+    static int mHeight;
 
     private Object mFrameSyncObject = new Object();     // guards mFrameAvailable
     private boolean mFrameAvailable;
@@ -57,12 +60,17 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
      * new EGL context and surface will be made current.  Creates a Surface that can be passed
      * to MediaCodec.configure().
      */
-    public CodecOutputSurface(int width, int height) {
+    public CodecOutputSurface(int width, int height, Bitmap map) {
         if (width <= 0 || height <= 0) {
             throw new IllegalArgumentException();
         }
         mWidth = width;
         mHeight = height;
+
+        // Deep copy because original bitmap gets recycled
+        this.map = Bitmap.createBitmap(map.getWidth(), map.getHeight(), map.getConfig());
+        Canvas copiedCanvas = new Canvas(this.map);
+        copiedCanvas.drawBitmap(map, 0f, 0f, null);
 
         eglSetup();
         makeCurrent();
@@ -182,6 +190,8 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
 
         mSurface.release();
 
+        map.recycle();
+
         // this causes a bunch of warnings that appear harmless but might confuse someone:
         //  W BufferQueue: [unnamed-3997-2] cancelBuffer: BufferQueue has been abandoned!
         //mSurfaceTexture.release();
@@ -276,13 +286,6 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
     }
 
     /**
-     * Wrapper
-     */
-    public void loadGLTextureFromBitmap(Bitmap bitmap) {
-        mTextureRender.loadGLTextureFromBitmap(bitmap);
-    }
-
-    /**
      * Code for rendering a texture onto a surface using OpenGL ES 2.0.
      */
     private static class STextureRender {
@@ -291,43 +294,43 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
         private static final int TRIANGLE_VERTICES_DATA_POS_OFFSET = 0;
         private static final int TRIANGLE_VERTICES_DATA_UV_OFFSET = 3;
         private final float[] mTriangleVerticesData = {
-                // X, Y, Z, U, V
-                -1.0f, -1.0f, 0, 0.f, 0.f,
-                1.0f, -1.0f, 0, 1.f, 0.f,
-                -1.0f,  1.0f, 0, 0.f, 1.f,
-                1.0f,  1.0f, 0, 1.f, 1.f,
+            // X, Y, Z, U, V
+            -1.0f, -1.0f, 0, 0.f, 0.f,
+            1.0f, -1.0f, 0, 1.f, 0.f,
+            -1.0f,  1.0f, 0, 0.f, 1.f,
+            1.0f,  1.0f, 0, 1.f, 1.f,
         };
 
         private FloatBuffer mTriangleVertices;
 
         private static final String VERTEX_SHADER = // Simple vertex shader, rectangle filling the screen
-                "uniform mat4 uMVPMatrix;\n" +
-                        "uniform mat4 uSTMatrix;\n" +
-                        "attribute vec4 aPosition;\n" +
-                        "attribute vec4 aTextureCoord;\n" +
-                        "varying vec2 vTextureCoord;\n" +
-                        "void main() {\n" +
-                        "   gl_Position = uMVPMatrix * aPosition;\n" +
-                        "   vTextureCoord = (uSTMatrix * aTextureCoord).xy;\n" +
-                        "}\n";
+            "uniform mat4 uMVPMatrix;\n" +
+            "uniform mat4 uSTMatrix;\n" +
+            "attribute vec4 aPosition;\n" +
+            "attribute vec4 aTextureCoord;\n" +
+            "varying vec2 vTextureCoord;\n" +
+            "void main() {\n" +
+            "   gl_Position = uMVPMatrix * aPosition;\n" +
+            "   vTextureCoord = (uSTMatrix * aTextureCoord).xy;\n" +
+            "}\n";
 
         // SEE: https://stackoverflow.com/questions/13376254/android-opengl-combination-of-surfacetexture-external-image-and-ordinary-textu
 
         private static final String FRAGMENT_SHADER =
-                "#extension GL_OES_EGL_image_external : require\n" +
-                        "precision mediump float;\n" +      // highp here doesn't seem to matter
-                        "varying vec2 vTextureCoord;\n" +
-                        "uniform samplerExternalOES sTexture;\n" + // This texture is the video frame
-                        "uniform sampler2D MapTexture;\n" + // This texture is the map
-                        "void main() {\n" +
-                        "   gl_FragColor = texture2D(sTexture, vTextureCoord);\n" + // get the pixel from the video frame in the position vTextureCoord
-                        //"   vec4 videoColor = texture2D(sTexture, vTextureCoord);\n" +
-                        //"   vec4 mapColor = texture2D(MapTexture, vTextureCoord);\n" +
-                        //"   if (mapColor.r > 0)\n" +
-                        //"       gl_FragColor = videoColor;\n" +
-                        //"   else\n" +
-                        //"       gl_FragColor = mapColor;\n" +
-                        "}\n";
+            "#extension GL_OES_EGL_image_external : require\n" +
+            "precision mediump float;\n" +      // highp here doesn't seem to matter
+            "varying vec2 vTextureCoord;\n" +
+            "uniform samplerExternalOES sTexture;\n" + // This texture is the video frame
+            "uniform sampler2D MapTexture;\n" + // This texture is the map
+            "void main() {\n" +
+            //"   gl_FragColor = texture2D(sTexture, vTextureCoord);\n" + // get the pixel from the video frame in the position vTextureCoord
+            "   vec4 videoColor = texture2D(sTexture, vTextureCoord);\n" +
+            "   vec4 mapColor = texture2D(MapTexture, vTextureCoord);\n" +
+            "   if (mapColor.r != 1.)\n" +
+            "       gl_FragColor = videoColor;\n" +
+            "   else\n" + // clear to RGB(16,16,16) to avoid black smearing
+            "       gl_FragColor = vec4(0.063,0.063,0.063,1.);\n" + // vec4(R,G,B,A)
+            "}\n";
 
         private float[] mMVPMatrix = new float[16];
         private float[] mSTMatrix = new float[16];
@@ -342,9 +345,7 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
 
         public STextureRender() {
             // Put triangle vertices data into bytebuffer to send to GLES
-            mTriangleVertices = ByteBuffer.allocateDirect(
-                    mTriangleVerticesData.length * FLOAT_SIZE_BYTES)
-                    .order(ByteOrder.nativeOrder()).asFloatBuffer();
+            mTriangleVertices = ByteBuffer.allocateDirect(mTriangleVerticesData.length * FLOAT_SIZE_BYTES).order(ByteOrder.nativeOrder()).asFloatBuffer();
             mTriangleVertices.put(mTriangleVerticesData).position(0);
 
             Matrix.setIdentityM(mSTMatrix, 0);
@@ -352,33 +353,6 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
 
         public int getTextureId() {
             return mainTextureID;
-        }
-
-        // COURTESY OF: https://gamedev.stackexchange.com/questions/10829/loading-png-textures-for-use-in-android-opengl-es1
-
-        /**
-         * Helper method to load a GL texture from a bitmap
-         *
-         * Note that the caller should "recycle" the bitmap
-         */
-        public void loadGLTextureFromBitmap(Bitmap bitmap) {
-            // Generate one texture pointer
-            int[] textureIds = new int[1];
-            GLES20.glGenTextures( 1, textureIds, 0 );
-            mapTextureID = textureIds[0];
-
-            // bind this texture
-            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, mapTextureID);
-
-            // Create Nearest Filtered Texture
-            GLES20.glTexParameterf(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR);
-            GLES20.glTexParameterf(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR);
-
-            GLES20.glTexParameterf(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_REPEAT);
-            GLES20.glTexParameterf(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_REPEAT);
-
-            // Use the Android GLUtils to specify a two-dimensional texture image from our bitmap
-            GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, bitmap, 0);
         }
 
         /**
@@ -392,15 +366,31 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
                 mSTMatrix[13] = 1.0f - mSTMatrix[13];
             }
 
+            GLES20.glViewport(0, 0, mWidth, mHeight);
+
             // (optional) clear to green so we can see if we're failing to set pixels
             GLES20.glClearColor(0.0f, 1.0f, 0.0f, 1.0f);
+
+            // Clear to RGB(16,16,16) to avoid black smearing
+            //GLES20.glClearColor(0.125f, 0.125f, 0.125f, 1.0f);
             GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
 
             GLES20.glUseProgram(mProgram);
             checkGlError("glUseProgram");
 
+            // From: https://github.com/ibraimgm/opengles2-2d-demos/blob/master/src/ibraim/opengles2/TextureActivity.java
+            // Bind video frame texture to 1!!
             GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
             GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, mainTextureID);
+            checkGlError("glBindTexture");
+
+            // TODO: move out of drawFrame?
+            // Bind map texture to 0!!
+            int uMap = GLES20.glGetUniformLocation(mProgram, "MapTexture");
+            GLES20.glUniform1i(uMap, 1);
+            GLES20.glActiveTexture(GLES20.GL_TEXTURE1);
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, mapTextureID);
+            checkGlError("glBindTexture");
 
             mTriangleVertices.position(TRIANGLE_VERTICES_DATA_POS_OFFSET);
             GLES20.glVertexAttribPointer(maPositionHandle, 3, GLES20.GL_FLOAT, false, TRIANGLE_VERTICES_DATA_STRIDE_BYTES, mTriangleVertices);
@@ -413,12 +403,6 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
             checkGlError("glVertexAttribPointer maTextureHandle");
             GLES20.glEnableVertexAttribArray(maTextureHandle);
             checkGlError("glEnableVertexAttribArray maTextureHandle");
-
-
-            //GLES20.glUniform1i(MapHandle, 1);
-            //GLES20.glActiveTexture(GLES20.GL_TEXTURE1);
-            //GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, MapID);
-
 
             Matrix.setIdentityM(mMVPMatrix, 0);
             GLES20.glUniformMatrix4fv(muMVPMatrixHandle, 1, false, mMVPMatrix, 0);
@@ -449,10 +433,12 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
             muSTMatrixHandle = GLES20.glGetUniformLocation(mProgram, "uSTMatrix");
             checkLocation(muSTMatrixHandle, "uSTMatrix");
 
-            int[] textures = new int[1];
-            GLES20.glGenTextures(1, textures, 0);
+            int[] textures = new int[2];
+            GLES20.glGenTextures(2, textures, 0);
 
             mainTextureID = textures[0];
+            mapTextureID = textures[1];
+
             GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, mainTextureID);
             checkGlError("glBindTexture mainTextureID");
 
@@ -461,6 +447,52 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
             GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
             GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
             checkGlError("glTexParameter");
+
+            loadGLTextureFromBitmap(map);
+        }
+
+        /**
+         * Helper method to load a GL texture from a bitmap
+         *
+         * Note that the caller should "recycle" the bitmap
+         */
+        // COURTESY OF: https://gamedev.stackexchange.com/questions/10829/loading-png-textures-for-use-in-android-opengl-es1
+        // TODO: recycle bitmap?
+        public void loadGLTextureFromBitmap(Bitmap bitmap) {
+            /*
+            int originalWidth = bitmap.getWidth(); //(int)(image.getIntrinsicWidth() / density);
+            int originalHeight = bitmap.getHeight(); //(int)(image.getIntrinsicHeight() / density);
+
+            int powWidth = getNextHighestPO2(originalWidth);
+            int powHeight = getNextHighestPO2(originalHeight);
+
+            // Create an empty, mutable bitmap
+            newbitmap = Bitmap.createBitmap(powWidth, powHeight, Bitmap.Config.ARGB_8888);
+            // get a canvas to paint over the bitmap
+            Canvas canvas = new Canvas(newbitmap);
+            newbitmap.eraseColor(0);
+
+            canvas.drawBitmap(bitmap, 0, 0, null);
+            // then use newbitmap instead of bitmap
+             */
+
+            // Texture id is already obtained in surfaceCreated
+            //int[] textureIds = new int[1];
+            //GLES20.glGenTextures( 1, textureIds, 0 );
+            //mapTextureID = textureIds[0];
+
+            // bind this texture
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, mapTextureID);
+            checkGlError("glBindTexture mapTextureID");
+
+            GLES20.glTexParameterf(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_NEAREST); // Nearest neighbor scaling
+            GLES20.glTexParameterf(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_NEAREST); //GLES20.GL_LINEAR);
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
+            checkGlError("glTexParameter");
+
+            // Use the Android GLUtils to specify a two-dimensional texture image from our bitmap
+            GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, bitmap, 0);
         }
 
         /**
@@ -535,6 +567,23 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
             if (location < 0) {
                 throw new RuntimeException("Unable to locate '" + label + "' in program");
             }
+        }
+
+        /**
+         * Calculates the next highest power of two for a given integer.
+         *
+         * @param n the number
+         * @return a power of two equal to or higher than n
+         */
+        public static int getNextHighestPO2( int n ) {
+            n -= 1;
+            n = n | (n >> 1);
+            n = n | (n >> 2);
+            n = n | (n >> 4);
+            n = n | (n >> 8);
+            n = n | (n >> 16);
+            n = n | (n >> 32);
+            return n + 1;
         }
     }
 }
