@@ -19,8 +19,11 @@ public class BitmapView extends SurfaceView implements SurfaceHolder.Callback, R
     private static final int refreshDelay = 32; // 30 FPS
     private static final String LOG_TAG = "BitmapView";
 
+    private static final boolean scale = false;
+
     private int width = 0;
     private int height = 0;
+    private float aspectRatio;
 
     private SurfaceHolder surfaceHolder = null;
 
@@ -68,6 +71,7 @@ public class BitmapView extends SurfaceView implements SurfaceHolder.Callback, R
 
     public void setBitmap(Bitmap bmp) {
         this.bmp = bmp;
+        this.aspectRatio = bmp.getWidth() / (float) bmp.getHeight();
     }
 
     @Override
@@ -134,7 +138,9 @@ public class BitmapView extends SurfaceView implements SurfaceHolder.Callback, R
         this.surfaceHolder = null;
 
         // destroy bitmaps
-        scaledbmp.recycle();
+        if(scaledbmp != null) {
+            scaledbmp.recycle();
+        }
         // don't recycle bmp because it is a reference to the bitmap in videothread, which needs to still be there
     }
 
@@ -153,11 +159,15 @@ public class BitmapView extends SurfaceView implements SurfaceHolder.Callback, R
                 return;
             }
 
-            float aspectRatio = bmp.getWidth() / (float) bmp.getHeight();
-            // Filter: false - nearest neighbor, true - bilinear
-            scaledbmp = Bitmap.createScaledBitmap(bmp, width, Math.round(width / aspectRatio), false);
 
-            canvas.drawBitmap(scaledbmp, 0, 0, null);
+            // Filter: false - nearest neighbor, true - bilinear
+
+            if(scale) {
+                scaledbmp = Bitmap.createScaledBitmap(bmp, width, Math.round(width / aspectRatio), false);
+                canvas.drawBitmap(scaledbmp, 0, 0, null);
+            } else {
+                canvas.drawBitmap(bmp, 0, 0, null);
+            }
 
             // Send message to main UI thread to update the drawing to the main view special area.
             surfaceHolder.unlockCanvasAndPost(canvas);
