@@ -311,6 +311,8 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
 
         private static final String VERTEX_SHADER = // Simple vertex shader, rectangle filling the screen
             "uniform mat4 uMVPMatrix;\n" +
+            "uniform vec2 uOffset;\n" + // (0.5 / width, 0.5 / height)
+            //"uniform mat4 uMVPMatrix;\n" +
             "uniform mat4 uSTMatrix;\n" +
             "attribute vec4 aPosition;\n" +
             "attribute vec4 aTextureCoord;\n" + // homogenous texture coordinates ([0-1],[0-1],0,1)
@@ -318,6 +320,7 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
             "void main() {\n" +
             "   gl_Position = uMVPMatrix * aPosition;\n" +
             "   vTextureCoord = (uSTMatrix * aTextureCoord).xy;\n" + // coordinates to sample the surfaceTexture (usually same as aTextureCoord)
+            "   vTextureCoord += uOffset;\n" + // offset to center of texel for pixel perfect
             "}\n"; // TODO: send untransformed aTextureCoord to fragment shader for map sampling to handle inversion
 
         // SEE: https://stackoverflow.com/questions/13376254/android-opengl-combination-of-surfacetexture-external-image-and-ordinary-textu
@@ -330,11 +333,8 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
             "uniform sampler2D MapTexture;\n" + // This texture is the map
             "void main() {\n" +
             //"   gl_FragColor = texture2D(sTexture, vTextureCoord);\n" + // get the pixel from the video frame in the position vTextureCoord
-            "   vec2 adjustedTC = vTextureCoord;\n" +
-            "   adjustedTC.x += 0.5 / 640.;\n" +
-            "   adjustedTC.y += 0.5 / 360.;\n" +
-            "   vec4 videoColor = texture2D(sTexture, adjustedTC);\n" +
-            "   vec4 mapColor = texture2D(MapTexture, adjustedTC);\n" +
+            "   vec4 videoColor = texture2D(sTexture, vTextureCoord);\n" +
+            "   vec4 mapColor = texture2D(MapTexture, vTextureCoord);\n" +
             //"   int row = (int)floor(mapColor.r * 255.);\n" + // float to byte
             //"   int column = (int)floor(mapColor.b * 65535. + mapColor.g * 255.);\n" + // float to 16 bit int
             "   if (mapColor.r != 1.)\n" +
@@ -355,6 +355,8 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
         private int muSTMatrixHandle;
         private int maPositionHandle;
         private int maTextureCoordHandle;
+        private int mOffsetHandle;
+        private int mMapTextureHandle;
 
         // SEE: https://www.mindcontrol.org/~hplus/graphics/opengl-pixel-perfect.html
 
@@ -401,15 +403,12 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
             checkGlError("glUseProgram");
 
             // From: https://github.com/ibraimgm/opengles2-2d-demos/blob/master/src/ibraim/opengles2/TextureActivity.java
-            // Bind video frame texture to 1!!
             GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
             GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, mainTextureID);
             checkGlError("glBindTexture");
 
-            // TODO: move out of drawFrame?
-            // Bind map texture to 0!!
-            int uMap = GLES20.glGetUniformLocation(mProgram, "MapTexture");
-            GLES20.glUniform1i(uMap, 1);
+            // TODO: move stuff out of drawFrame?
+            GLES20.glUniform1i(mMapTextureHandle, 1);
             GLES20.glActiveTexture(GLES20.GL_TEXTURE1);
             GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, mapTextureID);
             checkGlError("glBindTexture");
@@ -426,8 +425,14 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
             GLES20.glEnableVertexAttribArray(maTextureCoordHandle);
             checkGlError("glEnableVertexAttribArray maTextureCoordHandle");
 
+            // Uniform variables must be set after glUseProgram
+
             GLES20.glUniformMatrix4fv(muMVPMatrixHandle, 1, false, mMVPMatrix, 0);
             GLES20.glUniformMatrix4fv(muSTMatrixHandle, 1, false, mSTMatrix, 0);
+            checkGlError("glUniformMatrix4fv");
+
+            GLES20.glUniform2f(mOffsetHandle, 0.5f / mWidth, 0.5f / mHeight);
+            checkGlError("glUniform2fv");
 
             GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
             checkGlError("glDrawArrays");
@@ -453,6 +458,12 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
             checkLocation(muMVPMatrixHandle, "uMVPMatrix");
             muSTMatrixHandle = GLES20.glGetUniformLocation(mProgram, "uSTMatrix");
             checkLocation(muSTMatrixHandle, "uSTMatrix");
+
+            mOffsetHandle = GLES20.glGetUniformLocation(mProgram, "uOffset");
+            checkLocation(mOffsetHandle, "uOffset");
+
+            mMapTextureHandle = GLES20.glGetUniformLocation(mProgram, "MapTexture");
+            checkLocation(mMapTextureHandle, "MapTexture");
 
             int[] textures = new int[2];
             GLES20.glGenTextures(2, textures, 0);
