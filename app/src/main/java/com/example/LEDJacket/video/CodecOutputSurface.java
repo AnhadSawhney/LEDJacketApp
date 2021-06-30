@@ -18,6 +18,7 @@ import android.view.Surface;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
+import java.util.Arrays;
 
 // From ExtractMpegFramesTest, copied to a separate file
 
@@ -295,11 +296,16 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
         private static final int TRIANGLE_VERTICES_DATA_UV_OFFSET = 3;
         private final float[] mTriangleVerticesData = {
             // X, Y, Z, U, V
-            -1.0f, -1.0f, 0, 0.f, 0.f,
+            /*-1.0f, -1.0f, 0, 0.f, 0.f, // use these coordinates when mMVPMatrix is identity
             1.0f, -1.0f, 0, 1.f, 0.f,
             -1.0f,  1.0f, 0, 0.f, 1.f,
-            1.0f,  1.0f, 0, 1.f, 1.f,
-        };
+            1.0f,  1.0f, 0, 1.f, 1.f,*/
+
+            0f, 0f, 0, 0.f, 0.f, // use these coordinates when mMVPMatrix is an orthographic projection
+            mWidth, 0f, 0, 1.f, 0.f,
+            0f,  mHeight, 0, 0.f, 1.f,
+            mWidth,  mHeight, 0, 1.f, 1.f,
+        }; // aPosition   | aTextureCoord
 
         private FloatBuffer mTriangleVertices;
 
@@ -307,12 +313,12 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
             "uniform mat4 uMVPMatrix;\n" +
             "uniform mat4 uSTMatrix;\n" +
             "attribute vec4 aPosition;\n" +
-            "attribute vec4 aTextureCoord;\n" +
-            "varying vec2 vTextureCoord;\n" +
+            "attribute vec4 aTextureCoord;\n" + // homogenous texture coordinates ([0-1],[0-1],0,1)
+            "varying vec2 vTextureCoord;\n" + // texture coordinates to be sent to Fragment Shader
             "void main() {\n" +
             "   gl_Position = uMVPMatrix * aPosition;\n" +
-            "   vTextureCoord = (uSTMatrix * aTextureCoord).xy;\n" +
-            "}\n";
+            "   vTextureCoord = (uSTMatrix * aTextureCoord).xy;\n" + // coordinates to sample the surfaceTexture (usually same as aTextureCoord)
+            "}\n"; // TODO: send untransformed aTextureCoord to fragment shader for map sampling to handle inversion
 
         // SEE: https://stackoverflow.com/questions/13376254/android-opengl-combination-of-surfacetexture-external-image-and-ordinary-textu
 
@@ -320,20 +326,27 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
             "#extension GL_OES_EGL_image_external : require\n" +
             "precision mediump float;\n" +      // highp here doesn't seem to matter
             "varying vec2 vTextureCoord;\n" +
-            "uniform samplerExternalOES sTexture;\n" + // This texture is the video frame
+            "uniform samplerExternalOES sTexture;\n" + // This is the surfaceTexture with the video frame
             "uniform sampler2D MapTexture;\n" + // This texture is the map
             "void main() {\n" +
             //"   gl_FragColor = texture2D(sTexture, vTextureCoord);\n" + // get the pixel from the video frame in the position vTextureCoord
-            "   vec4 videoColor = texture2D(sTexture, vTextureCoord);\n" +
-            "   vec4 mapColor = texture2D(MapTexture, vTextureCoord);\n" +
+            "   vec2 adjustedTC = vTextureCoord;\n" +
+            "   adjustedTC.x += 0.5 / 640.;\n" +
+            "   adjustedTC.y += 0.5 / 360.;\n" +
+            "   vec4 videoColor = texture2D(sTexture, adjustedTC);\n" +
+            "   vec4 mapColor = texture2D(MapTexture, adjustedTC);\n" +
+            //"   int row = (int)floor(mapColor.r * 255.);\n" + // float to byte
+            //"   int column = (int)floor(mapColor.b * 65535. + mapColor.g * 255.);\n" + // float to 16 bit int
             "   if (mapColor.r != 1.)\n" +
             "       gl_FragColor = videoColor;\n" +
             "   else\n" + // clear to RGB(16,16,16) to avoid black smearing
             "       gl_FragColor = vec4(0.063,0.063,0.063,1.);\n" + // vec4(R,G,B,A)
             "}\n";
 
-        private float[] mMVPMatrix = new float[16];
-        private float[] mSTMatrix = new float[16];
+        private float[] mMVPMatrix = new float[16]; // This is the matrix that transforms the points into the triangle into homogenous world coordinates ([0-1],[0-1],0,1)
+        private float[] mSTMatrix = new float[16]; // This is the matrix that transforms homogenous texture coordinates to surfaceTexture coordinates
+
+        private float[] orthographic = new float[16]; // 4x4 matrix
 
         private int mProgram;
         private int mainTextureID = -12345; // invalid value, gets overridden by glGenTextures
@@ -341,14 +354,19 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
         private int muMVPMatrixHandle;
         private int muSTMatrixHandle;
         private int maPositionHandle;
-        private int maTextureHandle;
+        private int maTextureCoordHandle;
+
+        // SEE: https://www.mindcontrol.org/~hplus/graphics/opengl-pixel-perfect.html
 
         public STextureRender() {
             // Put triangle vertices data into bytebuffer to send to GLES
             mTriangleVertices = ByteBuffer.allocateDirect(mTriangleVerticesData.length * FLOAT_SIZE_BYTES).order(ByteOrder.nativeOrder()).asFloatBuffer();
             mTriangleVertices.put(mTriangleVerticesData).position(0);
 
-            Matrix.setIdentityM(mSTMatrix, 0);
+            // generate orthographic projection matrix, (0,0) is bottom-left corner, (width, height) is top-right corner
+            Matrix.orthoM(mMVPMatrix, 0, 0, mWidth, 0, mHeight, -1, 1);
+            //Matrix.setIdentityM(mMVPMatrix, 0);
+            Matrix.setIdentityM(mSTMatrix, 0); // this gets overwritten by the matrix from the surfaceTexture
         }
 
         public int getTextureId() {
@@ -361,12 +379,16 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
         public void drawFrame(SurfaceTexture st, boolean invert) {
             checkGlError("onDrawFrame start");
             st.getTransformMatrix(mSTMatrix);
-            if (invert) {
+            // This returns a matrix that maps 2D homogeneous texture coordinates of the form (s, t, 0, 1) with
+            // s and t in the inclusive range [0, 1] to the texture coordinate that should be used to sample
+            // that location from the texture.
+
+            //Log.d(LOG_TAG, Arrays.toString(mSTMatrix));
+
+            if (invert) { // invert y axis
                 mSTMatrix[5] = -mSTMatrix[5];
                 mSTMatrix[13] = 1.0f - mSTMatrix[13];
             }
-
-            GLES20.glViewport(0, 0, mWidth, mHeight);
 
             // (optional) clear to green so we can see if we're failing to set pixels
             GLES20.glClearColor(0.0f, 1.0f, 0.0f, 1.0f);
@@ -399,12 +421,11 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
             checkGlError("glEnableVertexAttribArray maPositionHandle");
 
             mTriangleVertices.position(TRIANGLE_VERTICES_DATA_UV_OFFSET);
-            GLES20.glVertexAttribPointer(maTextureHandle, 2, GLES20.GL_FLOAT, false, TRIANGLE_VERTICES_DATA_STRIDE_BYTES, mTriangleVertices);
-            checkGlError("glVertexAttribPointer maTextureHandle");
-            GLES20.glEnableVertexAttribArray(maTextureHandle);
-            checkGlError("glEnableVertexAttribArray maTextureHandle");
+            GLES20.glVertexAttribPointer(maTextureCoordHandle, 2, GLES20.GL_FLOAT, false, TRIANGLE_VERTICES_DATA_STRIDE_BYTES, mTriangleVertices);
+            checkGlError("glVertexAttribPointer maTextureCoordHandle");
+            GLES20.glEnableVertexAttribArray(maTextureCoordHandle);
+            checkGlError("glEnableVertexAttribArray maTextureCoordHandle");
 
-            Matrix.setIdentityM(mMVPMatrix, 0);
             GLES20.glUniformMatrix4fv(muMVPMatrixHandle, 1, false, mMVPMatrix, 0);
             GLES20.glUniformMatrix4fv(muSTMatrixHandle, 1, false, mSTMatrix, 0);
 
@@ -425,8 +446,8 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
 
             maPositionHandle = GLES20.glGetAttribLocation(mProgram, "aPosition");
             checkLocation(maPositionHandle, "aPosition");
-            maTextureHandle = GLES20.glGetAttribLocation(mProgram, "aTextureCoord");
-            checkLocation(maTextureHandle, "aTextureCoord");
+            maTextureCoordHandle = GLES20.glGetAttribLocation(mProgram, "aTextureCoord");
+            checkLocation(maTextureCoordHandle, "aTextureCoord");
 
             muMVPMatrixHandle = GLES20.glGetUniformLocation(mProgram, "uMVPMatrix");
             checkLocation(muMVPMatrixHandle, "uMVPMatrix");
@@ -442,13 +463,16 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
             GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, mainTextureID);
             checkGlError("glBindTexture mainTextureID");
 
+            // MINIMIZATION FILTER IS TAKING EFFECT
             GLES20.glTexParameterf(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_NEAREST); // Nearest neighbor scaling
-            GLES20.glTexParameterf(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_NEAREST); //GLES20.GL_LINEAR);
+            GLES20.glTexParameterf(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_NEAREST); //GLES20.GL_NEAREST);
             GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
             GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
             checkGlError("glTexParameter");
 
             loadGLTextureFromBitmap(map);
+
+            GLES20.glViewport(0, 0, mWidth, mHeight);
         }
 
         /**
@@ -486,7 +510,7 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
             checkGlError("glBindTexture mapTextureID");
 
             GLES20.glTexParameterf(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_NEAREST); // Nearest neighbor scaling
-            GLES20.glTexParameterf(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_NEAREST); //GLES20.GL_LINEAR);
+            GLES20.glTexParameterf(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_NEAREST); //GLES20.GL_NEAREST);
             GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
             GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
             checkGlError("glTexParameter");

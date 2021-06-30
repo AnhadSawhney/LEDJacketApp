@@ -19,7 +19,7 @@ public class BitmapView extends SurfaceView implements SurfaceHolder.Callback, R
     private static final int refreshDelay = 32; // 30 FPS
     private static final String LOG_TAG = "BitmapView";
 
-    private static final boolean scale = false;
+    private static final boolean scale = true;
 
     private int width = 0;
     private int height = 0;
