@@ -18,7 +18,6 @@ import android.view.Surface;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
-import java.util.Arrays;
 
 // From ExtractMpegFramesTest, copied to a separate file
 
@@ -40,7 +39,7 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
     private static final boolean VERBOSE = false; // lots of logging
     private STextureRender mTextureRender;
     private SurfaceTexture mSurfaceTexture;
-    private Surface mSurface;
+    private Surface mSurface; // decoder renders to this
 
     private static Bitmap map;
 
@@ -337,10 +336,11 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
             "   vec4 mapColor = texture2D(MapTexture, vTextureCoord);\n" +
             //"   int row = (int)floor(mapColor.r * 255.);\n" + // float to byte
             //"   int column = (int)floor(mapColor.b * 65535. + mapColor.g * 255.);\n" + // float to 16 bit int
-            "   if (mapColor.r != 1.)\n" +
+            "   if (mapColor.r != 1.) {\n" +
             "       gl_FragColor = videoColor;\n" +
-            "   else\n" + // clear to RGB(16,16,16) to avoid black smearing
-            "       gl_FragColor = vec4(0.063,0.063,0.063,1.);\n" + // vec4(R,G,B,A)
+            "   } else {\n" +
+            "       gl_FragColor = vec4(0.063,0.063,0.063,1.);\n" + // clear to RGBA(16,16,16, 255) to avoid black smearing
+            "   }\n" +
             "}\n";
 
         private float[] mMVPMatrix = new float[16]; // This is the matrix that transforms the points into the triangle into homogenous world coordinates ([0-1],[0-1],0,1)

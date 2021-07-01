@@ -140,7 +140,7 @@ public class VideoThread implements Runnable {
         // it contains a copy of the CSD-0/CSD-1 codec-specific data chunks.
         String mime = format.getString(MediaFormat.KEY_MIME);
         decoder = MediaCodec.createDecoderByType(mime);
-        decoder.configure(format, outputSurface.getSurface(), null, 0);
+        decoder.configure(format, outputSurface.getSurface(), null, 0); // renders to a Surface
 
         if(VERBOSE) {
             MediaCodecInfo info = decoder.getCodecInfo();
