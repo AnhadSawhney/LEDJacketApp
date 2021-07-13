@@ -77,6 +77,7 @@ public class VideoThread implements Runnable {
     private Thread thread;
 
     private Bitmap mainBitmap;
+    private Bitmap dataBitmap;
 
     /**
      * Tests extraction from an MP4 to a series of PNG files.
@@ -89,6 +90,10 @@ public class VideoThread implements Runnable {
     public VideoThread(Context context) {
         this.context = context;
         mainBitmap = Bitmap.createBitmap(saveWidth, saveHeight, Bitmap.Config.ARGB_8888);
+        mainBitmap.setDensity(Bitmap.DENSITY_NONE); // stop auto-scaling
+        // TODO: get width and height properly
+        dataBitmap = Bitmap.createBitmap(300, 200, Bitmap.Config.ARGB_8888);
+        dataBitmap.setDensity(Bitmap.DENSITY_NONE); // stop auto-scaling
         start();
     }
 
@@ -128,7 +133,10 @@ public class VideoThread implements Runnable {
                     format.getInteger(MediaFormat.KEY_HEIGHT));
         }
 
-        Bitmap bitmap = BitmapFactory.decodeResource(resources, R.drawable.map);
+        BitmapFactory.Options o = new BitmapFactory.Options();
+        o.inScaled = false; // prevent bitmap from getting scaled because we need the exact map image
+        Bitmap bitmap = BitmapFactory.decodeResource(resources, R.drawable.map, o);
+        //Log.d(LOG_TAG, bitmap.getWidth() + " " + bitmap.getHeight());
 
         // Could use width/height from the MediaFormat to get full-size frames.
         outputSurface = new CodecOutputSurface(saveWidth, saveHeight, bitmap);
