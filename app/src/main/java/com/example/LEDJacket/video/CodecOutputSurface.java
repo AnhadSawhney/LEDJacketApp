@@ -9,7 +9,7 @@ import android.opengl.EGLContext;
 import android.opengl.EGLDisplay;
 import android.opengl.EGLSurface;
 import android.opengl.GLES11Ext;
-import android.opengl.GLES20;
+import android.opengl.GLES31;
 import android.opengl.GLUtils;
 import android.opengl.Matrix;
 import android.util.Log;
@@ -37,7 +37,7 @@ import java.nio.FloatBuffer;
 public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListener {
     private static final String LOG_TAG = "CodecOutputSurface";
     private static final boolean VERBOSE = false; // lots of logging
-    private STextureRender mTextureRender;
+    private VideoTextureRender mTextureRender;
     private SurfaceTexture mSurfaceTexture;
     private Surface mSurface; // decoder renders to this
 
@@ -52,8 +52,10 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
     private Object mFrameSyncObject = new Object();     // guards mFrameAvailable
     private boolean mFrameAvailable;
 
-    private ByteBuffer mainPixelBuf;
-    private ByteBuffer dataPixelBuf;
+    private static final int mainPixelBufSize = mWidth * mHeight * 4;
+    private static ByteBuffer mainPixelBuf;
+    private static final int dataPixelBufSize = 300 * 200 * 4;  //36864; // Take this number from the python script
+    private static ByteBuffer dataPixelBuf;
 
     /**
      * Creates a CodecOutputSurface backed by a pbuffer with the specified dimensions.  The
@@ -81,7 +83,7 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
      * Creates interconnected instances of TextureRender, SurfaceTexture, and Surface.
      */
     private void setup() {
-        mTextureRender = new STextureRender();
+        mTextureRender = new VideoTextureRender();
         mTextureRender.surfaceCreated();
 
         if (VERBOSE) Log.d(LOG_TAG, "textureID=" + mTextureRender.getTextureId());
@@ -102,9 +104,9 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
 
         mSurface = new Surface(mSurfaceTexture);
 
-        mainPixelBuf = ByteBuffer.allocateDirect(mWidth * mHeight * 4);
+        mainPixelBuf = ByteBuffer.allocateDirect(mainPixelBufSize);
         mainPixelBuf.order(ByteOrder.LITTLE_ENDIAN);
-        dataPixelBuf = ByteBuffer.allocateDirect(36864); // Take this number from the python script
+        dataPixelBuf = ByteBuffer.allocateDirect(dataPixelBufSize);
         dataPixelBuf.order(ByteOrder.LITTLE_ENDIAN);
     }
 
@@ -270,9 +272,17 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
 
     public void putFrameOnBitmap(Bitmap bmp) { // Bitmap must have Bitmap.Config.ARGB_8888, mWidth, mHeight
         mainPixelBuf.rewind();
-        GLES20.glReadPixels(0, 0, mWidth, mHeight, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, mainPixelBuf);
+        GLES31.glReadPixels(0, 0, mWidth, mHeight, GLES31.GL_RGBA, GLES31.GL_UNSIGNED_BYTE, mainPixelBuf);
         //Bitmap bmp = Bitmap.createBitmap(mWidth, mHeight, Bitmap.Config.ARGB_8888);
         bmp.copyPixelsFromBuffer(mainPixelBuf);
+    }
+
+    public void putMainImageOnBitmap(Bitmap bmp) {
+        // TODO: implement this
+    }
+
+    public void putDataImageOnBitmap(Bitmap bmp) {
+        // TODO: implement this
     }
 
     /**
@@ -288,7 +298,7 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
     /**
      * Code for rendering a texture onto a surface using OpenGL ES 2.0.
      */
-    private static class STextureRender {
+    private static class VideoTextureRender {
         private static final int FLOAT_SIZE_BYTES = 4;
         private static final int TRIANGLE_VERTICES_DATA_STRIDE_BYTES = 5 * FLOAT_SIZE_BYTES;
         private static final int TRIANGLE_VERTICES_DATA_POS_OFFSET = 0;
@@ -325,8 +335,15 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
         // SEE: https://stackoverflow.com/questions/13376254/android-opengl-combination-of-surfacetexture-external-image-and-ordinary-textu
 
         private static final String FRAGMENT_SHADER =
+            "#version 310 es\n" +
             "#extension GL_OES_EGL_image_external : require\n" +
             "precision mediump float;\n" +      // highp here doesn't seem to matter
+            "layout(std430) buffer;\n" + // Sets the default layout for SSBOs.
+            "layout(binding = 0) buffer SSBO {\n" +
+            "   vec4 data[];\n" +
+            "};\n" +
+            "uniform int rows;\n" +
+            "uniform int columns;\n" +
             "varying vec2 vTextureCoord;\n" +
             "uniform samplerExternalOES sTexture;\n" + // This is the surfaceTexture with the video frame
             "uniform sampler2D MapTexture;\n" + // This texture is the map
@@ -334,10 +351,13 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
             //"   gl_FragColor = texture2D(sTexture, vTextureCoord);\n" + // get the pixel from the video frame in the position vTextureCoord
             "   vec4 videoColor = texture2D(sTexture, vTextureCoord);\n" +
             "   vec4 mapColor = texture2D(MapTexture, vTextureCoord);\n" +
-            //"   int row = (int)floor(mapColor.r * 255.);\n" + // float to byte
-            //"   int column = (int)floor(mapColor.b * 65535. + mapColor.g * 255.);\n" + // float to 16 bit int
             "   if (mapColor.r != 1.) {\n" +
             "       gl_FragColor = videoColor;\n" +
+            "       int row = (int)floor(mapColor.r * 255.);\n" + // float to byte
+            "       int column = (int)floor(mapColor.b * 65535. + mapColor.g * 255.);\n" + // float to 16 bit int
+            "       if(column < columns && row < rows) {\n" + // safety
+            "           atomicExchange(data[column*rows + row], videoColor);\n" + // write to location, blocking other threads
+            "       }\n" +
             "   } else {\n" +
             "       gl_FragColor = vec4(0.063,0.063,0.063,1.);\n" + // clear to RGBA(16,16,16, 255) to avoid black smearing
             "   }\n" +
@@ -345,8 +365,6 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
 
         private float[] mMVPMatrix = new float[16]; // This is the matrix that transforms the points into the triangle into homogenous world coordinates ([0-1],[0-1],0,1)
         private float[] mSTMatrix = new float[16]; // This is the matrix that transforms homogenous texture coordinates to surfaceTexture coordinates
-
-        private float[] orthographic = new float[16]; // 4x4 matrix
 
         private int mProgram;
         private int mainTextureID = -12345; // invalid value, gets overridden by glGenTextures
@@ -357,10 +375,11 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
         private int maTextureCoordHandle;
         private int mOffsetHandle;
         private int mMapTextureHandle;
+        private int SSBOHandle;
 
         // SEE: https://www.mindcontrol.org/~hplus/graphics/opengl-pixel-perfect.html
 
-        public STextureRender() {
+        public VideoTextureRender() {
             // Put triangle vertices data into bytebuffer to send to GLES
             mTriangleVertices = ByteBuffer.allocateDirect(mTriangleVerticesData.length * FLOAT_SIZE_BYTES).order(ByteOrder.nativeOrder()).asFloatBuffer();
             mTriangleVertices.put(mTriangleVerticesData).position(0);
@@ -393,51 +412,53 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
             }
 
             // (optional) clear to green so we can see if we're failing to set pixels
-            GLES20.glClearColor(0.0f, 1.0f, 0.0f, 1.0f);
+            GLES31.glClearColor(0.0f, 1.0f, 0.0f, 1.0f);
 
             // Clear to RGB(16,16,16) to avoid black smearing
-            //GLES20.glClearColor(0.125f, 0.125f, 0.125f, 1.0f);
-            GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
+            //GLES31.glClearColor(0.125f, 0.125f, 0.125f, 1.0f);
+            GLES31.glClear(GLES31.GL_COLOR_BUFFER_BIT);
 
-            GLES20.glUseProgram(mProgram);
+            GLES31.glUseProgram(mProgram);
             checkGlError("glUseProgram");
 
+            GLES31.glBindBufferBase(GLES31.GL_SHADER_STORAGE_BUFFER, 0, SSBOHandle);
+
             // From: https://github.com/ibraimgm/opengles2-2d-demos/blob/master/src/ibraim/opengles2/TextureActivity.java
-            GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
-            GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, mainTextureID);
+            GLES31.glActiveTexture(GLES31.GL_TEXTURE0);
+            GLES31.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, mainTextureID);
             checkGlError("glBindTexture");
 
             // TODO: move stuff out of drawFrame?
-            GLES20.glUniform1i(mMapTextureHandle, 1);
-            GLES20.glActiveTexture(GLES20.GL_TEXTURE1);
-            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, mapTextureID);
+            GLES31.glUniform1i(mMapTextureHandle, 1);
+            GLES31.glActiveTexture(GLES31.GL_TEXTURE1);
+            GLES31.glBindTexture(GLES31.GL_TEXTURE_2D, mapTextureID);
             checkGlError("glBindTexture");
 
             mTriangleVertices.position(TRIANGLE_VERTICES_DATA_POS_OFFSET);
-            GLES20.glVertexAttribPointer(maPositionHandle, 3, GLES20.GL_FLOAT, false, TRIANGLE_VERTICES_DATA_STRIDE_BYTES, mTriangleVertices);
+            GLES31.glVertexAttribPointer(maPositionHandle, 3, GLES31.GL_FLOAT, false, TRIANGLE_VERTICES_DATA_STRIDE_BYTES, mTriangleVertices);
             checkGlError("glVertexAttribPointer maPosition");
-            GLES20.glEnableVertexAttribArray(maPositionHandle);
+            GLES31.glEnableVertexAttribArray(maPositionHandle);
             checkGlError("glEnableVertexAttribArray maPositionHandle");
 
             mTriangleVertices.position(TRIANGLE_VERTICES_DATA_UV_OFFSET);
-            GLES20.glVertexAttribPointer(maTextureCoordHandle, 2, GLES20.GL_FLOAT, false, TRIANGLE_VERTICES_DATA_STRIDE_BYTES, mTriangleVertices);
+            GLES31.glVertexAttribPointer(maTextureCoordHandle, 2, GLES31.GL_FLOAT, false, TRIANGLE_VERTICES_DATA_STRIDE_BYTES, mTriangleVertices);
             checkGlError("glVertexAttribPointer maTextureCoordHandle");
-            GLES20.glEnableVertexAttribArray(maTextureCoordHandle);
+            GLES31.glEnableVertexAttribArray(maTextureCoordHandle);
             checkGlError("glEnableVertexAttribArray maTextureCoordHandle");
 
             // Uniform variables must be set after glUseProgram
 
-            GLES20.glUniformMatrix4fv(muMVPMatrixHandle, 1, false, mMVPMatrix, 0);
-            GLES20.glUniformMatrix4fv(muSTMatrixHandle, 1, false, mSTMatrix, 0);
+            GLES31.glUniformMatrix4fv(muMVPMatrixHandle, 1, false, mMVPMatrix, 0);
+            GLES31.glUniformMatrix4fv(muSTMatrixHandle, 1, false, mSTMatrix, 0);
             checkGlError("glUniformMatrix4fv");
 
-            GLES20.glUniform2f(mOffsetHandle, 0.5f / mWidth, 0.5f / mHeight);
+            GLES31.glUniform2f(mOffsetHandle, 0.5f / mWidth, 0.5f / mHeight);
             checkGlError("glUniform2fv");
 
-            GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
+            GLES31.glDrawArrays(GLES31.GL_TRIANGLE_STRIP, 0, 4);
             checkGlError("glDrawArrays");
 
-            GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, 0);
+            GLES31.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, 0);
         }
 
         /**
@@ -449,41 +470,64 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
                 throw new RuntimeException("failed creating program");
             }
 
-            maPositionHandle = GLES20.glGetAttribLocation(mProgram, "aPosition");
+            final int[] ssbos = new int[1];
+            GLES31.glGenBuffers(1, ssbos, 0);
+            SSBOHandle = ssbos[0];
+
+            GLES31.glBindBuffer(GLES31.GL_SHADER_STORAGE_BUFFER, SSBOHandle);
+            GLES31.glBufferData(GLES31.GL_SHADER_STORAGE_BUFFER, dataPixelBufSize, null, GLES31.GL_STATIC_DRAW);
+
+            int bufMask = GLES31.GL_MAP_WRITE_BIT | GLES31.GL_MAP_INVALIDATE_BUFFER_BIT;
+            dataPixelBuf = (ByteBuffer) GLES31.glMapBufferRange(GLES31.GL_SHADER_STORAGE_BUFFER, 0, dataPixelBufSize, bufMask);
+            dataPixelBuf.rewind();
+            while(dataPixelBuf.hasRemaining())
+                dataPixelBuf.put((byte) 0);
+            // Maybe set to zero
+            GLES31.glUnmapBuffer(GLES31.GL_SHADER_STORAGE_BUFFER);
+
+            maPositionHandle = GLES31.glGetAttribLocation(mProgram, "aPosition");
             checkLocation(maPositionHandle, "aPosition");
-            maTextureCoordHandle = GLES20.glGetAttribLocation(mProgram, "aTextureCoord");
+            maTextureCoordHandle = GLES31.glGetAttribLocation(mProgram, "aTextureCoord");
             checkLocation(maTextureCoordHandle, "aTextureCoord");
 
-            muMVPMatrixHandle = GLES20.glGetUniformLocation(mProgram, "uMVPMatrix");
+            muMVPMatrixHandle = GLES31.glGetUniformLocation(mProgram, "uMVPMatrix");
             checkLocation(muMVPMatrixHandle, "uMVPMatrix");
-            muSTMatrixHandle = GLES20.glGetUniformLocation(mProgram, "uSTMatrix");
+            muSTMatrixHandle = GLES31.glGetUniformLocation(mProgram, "uSTMatrix");
             checkLocation(muSTMatrixHandle, "uSTMatrix");
 
-            mOffsetHandle = GLES20.glGetUniformLocation(mProgram, "uOffset");
+            mOffsetHandle = GLES31.glGetUniformLocation(mProgram, "uOffset");
             checkLocation(mOffsetHandle, "uOffset");
 
-            mMapTextureHandle = GLES20.glGetUniformLocation(mProgram, "MapTexture");
+            mMapTextureHandle = GLES31.glGetUniformLocation(mProgram, "MapTexture");
             checkLocation(mMapTextureHandle, "MapTexture");
 
+            int rowshandle = GLES31.glGetUniformLocation(mProgram, "rows");
+            checkLocation(rowshandle, "rows");
+            GLES31.glUniform1i(rowshandle, mWidth);
+
+            int columnshandle = GLES31.glGetUniformLocation(mProgram, "columns");
+            checkLocation(columnshandle, "columns");
+            GLES31.glUniform1i(columnshandle, mHeight);
+
             int[] textures = new int[2];
-            GLES20.glGenTextures(2, textures, 0);
+            GLES31.glGenTextures(2, textures, 0);
 
             mainTextureID = textures[0];
             mapTextureID = textures[1];
 
-            GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, mainTextureID);
+            GLES31.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, mainTextureID);
             checkGlError("glBindTexture mainTextureID");
 
             // MINIMIZATION FILTER IS TAKING EFFECT
-            GLES20.glTexParameterf(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_NEAREST); // Nearest neighbor scaling
-            GLES20.glTexParameterf(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_NEAREST); //GLES20.GL_NEAREST);
-            GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
-            GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
+            GLES31.glTexParameterf(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES31.GL_TEXTURE_MIN_FILTER, GLES31.GL_NEAREST); // Nearest neighbor scaling
+            GLES31.glTexParameterf(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES31.GL_TEXTURE_MAG_FILTER, GLES31.GL_NEAREST); //GLES31.GL_NEAREST);
+            GLES31.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES31.GL_TEXTURE_WRAP_S, GLES31.GL_CLAMP_TO_EDGE);
+            GLES31.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES31.GL_TEXTURE_WRAP_T, GLES31.GL_CLAMP_TO_EDGE);
             checkGlError("glTexParameter");
 
             loadGLTextureFromBitmap(map);
 
-            GLES20.glViewport(0, 0, mWidth, mHeight);
+            GLES31.glViewport(0, 0, mWidth, mHeight);
         }
 
         /**
@@ -513,21 +557,21 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
 
             // Texture id is already obtained in surfaceCreated
             //int[] textureIds = new int[1];
-            //GLES20.glGenTextures( 1, textureIds, 0 );
+            //GLES31.glGenTextures( 1, textureIds, 0 );
             //mapTextureID = textureIds[0];
 
             // bind this texture
-            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, mapTextureID);
+            GLES31.glBindTexture(GLES31.GL_TEXTURE_2D, mapTextureID);
             checkGlError("glBindTexture mapTextureID");
 
-            GLES20.glTexParameterf(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_NEAREST); // Nearest neighbor scaling
-            GLES20.glTexParameterf(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_NEAREST); //GLES20.GL_NEAREST);
-            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
-            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
+            GLES31.glTexParameterf(GLES31.GL_TEXTURE_2D, GLES31.GL_TEXTURE_MIN_FILTER, GLES31.GL_NEAREST); // Nearest neighbor scaling
+            GLES31.glTexParameterf(GLES31.GL_TEXTURE_2D, GLES31.GL_TEXTURE_MAG_FILTER, GLES31.GL_NEAREST); //GLES31.GL_NEAREST);
+            GLES31.glTexParameteri(GLES31.GL_TEXTURE_2D, GLES31.GL_TEXTURE_WRAP_S, GLES31.GL_CLAMP_TO_EDGE);
+            GLES31.glTexParameteri(GLES31.GL_TEXTURE_2D, GLES31.GL_TEXTURE_WRAP_T, GLES31.GL_CLAMP_TO_EDGE);
             checkGlError("glTexParameter");
 
             // Use the Android GLUtils to specify a two-dimensional texture image from our bitmap
-            GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, bitmap, 0);
+            GLUtils.texImage2D(GLES31.GL_TEXTURE_2D, 0, bitmap, 0);
         }
 
         /**
@@ -537,7 +581,7 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
             if (fragmentShader == null) {
                 fragmentShader = FRAGMENT_SHADER;
             }
-            GLES20.glDeleteProgram(mProgram);
+            GLES31.glDeleteProgram(mProgram);
             mProgram = createProgram(VERTEX_SHADER, fragmentShader);
             if (mProgram == 0) {
                 throw new RuntimeException("failed creating program");
@@ -545,46 +589,46 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
         }
 
         private int loadShader(int shaderType, String source) {
-            int shader = GLES20.glCreateShader(shaderType);
+            int shader = GLES31.glCreateShader(shaderType);
             checkGlError("glCreateShader type=" + shaderType);
-            GLES20.glShaderSource(shader, source);
-            GLES20.glCompileShader(shader);
+            GLES31.glShaderSource(shader, source);
+            GLES31.glCompileShader(shader);
             int[] compiled = new int[1];
-            GLES20.glGetShaderiv(shader, GLES20.GL_COMPILE_STATUS, compiled, 0);
+            GLES31.glGetShaderiv(shader, GLES31.GL_COMPILE_STATUS, compiled, 0);
             if (compiled[0] == 0) {
                 Log.e(LOG_TAG, "Could not compile shader " + shaderType + ":");
-                Log.e(LOG_TAG, " " + GLES20.glGetShaderInfoLog(shader));
-                GLES20.glDeleteShader(shader);
+                Log.e(LOG_TAG, " " + GLES31.glGetShaderInfoLog(shader));
+                GLES31.glDeleteShader(shader);
                 shader = 0;
             }
             return shader;
         }
 
         private int createProgram(String vertexSource, String fragmentSource) {
-            int vertexShader = loadShader(GLES20.GL_VERTEX_SHADER, vertexSource);
+            int vertexShader = loadShader(GLES31.GL_VERTEX_SHADER, vertexSource);
             if (vertexShader == 0) {
                 return 0;
             }
-            int pixelShader = loadShader(GLES20.GL_FRAGMENT_SHADER, fragmentSource);
+            int pixelShader = loadShader(GLES31.GL_FRAGMENT_SHADER, fragmentSource);
             if (pixelShader == 0) {
                 return 0;
             }
 
-            int program = GLES20.glCreateProgram();
+            int program = GLES31.glCreateProgram();
             if (program == 0) {
                 Log.e(LOG_TAG, "Could not create program");
             }
-            GLES20.glAttachShader(program, vertexShader);
+            GLES31.glAttachShader(program, vertexShader);
             checkGlError("glAttachShader");
-            GLES20.glAttachShader(program, pixelShader);
+            GLES31.glAttachShader(program, pixelShader);
             checkGlError("glAttachShader");
-            GLES20.glLinkProgram(program);
+            GLES31.glLinkProgram(program);
             int[] linkStatus = new int[1];
-            GLES20.glGetProgramiv(program, GLES20.GL_LINK_STATUS, linkStatus, 0);
-            if (linkStatus[0] != GLES20.GL_TRUE) {
+            GLES31.glGetProgramiv(program, GLES31.GL_LINK_STATUS, linkStatus, 0);
+            if (linkStatus[0] != GLES31.GL_TRUE) {
                 Log.e(LOG_TAG, "Could not link program: ");
-                Log.e(LOG_TAG, GLES20.glGetProgramInfoLog(program));
-                GLES20.glDeleteProgram(program);
+                Log.e(LOG_TAG, GLES31.glGetProgramInfoLog(program));
+                GLES31.glDeleteProgram(program);
                 program = 0;
             }
             return program;
@@ -592,7 +636,7 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
 
         public void checkGlError(String op) {
             int error;
-            while ((error = GLES20.glGetError()) != GLES20.GL_NO_ERROR) {
+            while ((error = GLES31.glGetError()) != GLES31.GL_NO_ERROR) {
                 Log.e(LOG_TAG, op + ": glError " + error);
                 throw new RuntimeException(op + ": glError " + error);
             }

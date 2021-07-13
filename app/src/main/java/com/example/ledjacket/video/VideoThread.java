@@ -265,7 +265,9 @@ public class VideoThread implements Runnable {
                         outputSurface.awaitNewImage();
                         outputSurface.drawImage(true);
 
-                        outputSurface.putFrameOnBitmap(mainBitmap);
+                        //outputSurface.putFrameOnBitmap(mainBitmap);
+                        outputSurface.putMainImageOnBitmap(mainBitmap);
+                        outputSurface.putDataImageOnBitmap(dataBitmap);
                     } else {
                         if (VERBOSE) Log.d(LOG_TAG, "rendering skipped");
                     }
