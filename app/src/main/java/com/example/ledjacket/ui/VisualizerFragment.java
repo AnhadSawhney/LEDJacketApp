@@ -2,7 +2,10 @@ package com.example.ledjacket.ui;
 
 import android.content.Context;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.LayoutInflater;
+import android.view.SurfaceHolder;
+import android.view.SurfaceView;
 import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
@@ -77,11 +80,16 @@ public class VisualizerFragment extends Fragment {
         swt2.setMiddleman(middleman);
         swt3.setMiddleman(middleman);
 
-        final BitmapView mainView = binding.mainView;
+        final SurfaceView mainView = binding.mainView;
         final BitmapView dataView = binding.dataView;
 
-        mainView.setBitmap(middleman.getVideoThread().getMainBitmap());
-        dataView.setBitmap(middleman.getVideoThread().getDataBitmap());
+        //mainView.setBitmap(middleman.getVideoThread().getMainBitmap());
+        // wait for videothread to make the output surface
+        while(middleman.getVideoThread().getCodecOutputSurface() == null);
+
+        Log.d("Visualizer Fragment", "Ask for outputsurface from videothread");
+        mainView.getHolder().addCallback(middleman.getVideoThread().getCodecOutputSurface());
+        //dataView.setBitmap(middleman.getVideoThread().getDataBitmap());
 
         return root;
     }

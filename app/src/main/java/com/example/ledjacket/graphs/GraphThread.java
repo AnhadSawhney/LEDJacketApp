@@ -166,6 +166,8 @@ public abstract class GraphThread extends SurfaceView implements SurfaceHolder.C
 
     protected abstract void draw();
 
+    //TODO: https://developer.android.com/reference/android/view/View#postOnAnimation(java.lang.Runnable)
+
     @Override
     public void run() {
         while(threadRunning) {
