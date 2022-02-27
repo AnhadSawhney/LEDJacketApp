@@ -91,7 +91,7 @@
             android:text="Data sent to display:"
             android:textColor="?attr/colorSecondary" />
 
-        <com.example.ledjacket.video.BitmapView
+        <TextView
             android:id="@+id/dataView"
             android:layout_width="match_parent"
             android:layout_height="128dp" />

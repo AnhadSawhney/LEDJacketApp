@@ -13,10 +13,12 @@ import android.media.MediaExtractor;
 import android.media.MediaFormat;
 import android.os.Build;
 import android.util.Log;
+import android.view.SurfaceView;
 
 import androidx.annotation.RequiresApi;
 
 import com.example.ledjacket.BuildConfig;
+import com.example.ledjacket.Middleman;
 import com.example.ledjacket.R;
 
 import java.io.File;
@@ -76,6 +78,8 @@ public class VideoThread implements Runnable {
 
     private Thread thread;
 
+    //private SurfaceView mainView;
+
     //private Bitmap mainBitmap;
     //private Bitmap dataBitmap;
 
@@ -98,6 +102,7 @@ public class VideoThread implements Runnable {
     }
 
     // COURTESY OF https://stackoverflow.com/questions/24030756/mediaextractor-mediametadataretriever-with-raw-asset-file
+    @RequiresApi(api = Build.VERSION_CODES.Q)
     public void setFile(String filename) throws Throwable {
         //File inputFile = new File(FILES_DIR, INPUT_FILE);   // must be an absolute path
 
@@ -176,6 +181,7 @@ public class VideoThread implements Runnable {
         }
     }
 
+    @RequiresApi(api = Build.VERSION_CODES.Q)
     @Override
     public void run() {
         // SET FILE MUST BE CALLED IN RUN FOR SOME GODFORSAKEN REASON
@@ -269,11 +275,11 @@ public class VideoThread implements Runnable {
 
                     if (doRender) {
                         outputSurface.awaitNewImage();
-                        outputSurface.drawImage(true);
+                        outputSurface.drawImage();
 
                         //outputSurface.putFrameOnBitmap(mainBitmap);
-                        outputSurface.putMainImageOnBitmap(mainBitmap);
-                        outputSurface.putDataImageOnBitmap(dataBitmap);
+                        //outputSurface.putMainImageOnBitmap(mainBitmap);
+                        //outputSurface.putDataImageOnBitmap(dataBitmap);
                     } else {
                         if (VERBOSE) Log.d(LOG_TAG, "rendering skipped");
                     }
@@ -342,6 +348,19 @@ public class VideoThread implements Runnable {
 
         return -1;
     }
+
+    /*
+    public SurfaceView getMainView() {
+        return mainView;
+    }
+
+     */
+
+    public void setMainView(SurfaceView mainView) {
+        outputSurface.setMainView(mainView);
+        //this.mainView = mainView;
+    }
+
 
     /*
     public Bitmap getMainBitmap() {

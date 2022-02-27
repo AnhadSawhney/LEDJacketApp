@@ -18,7 +18,7 @@ import java.util.logging.Logger;
 
 // Courtesy of https://www.dev2qa.com/android-draw-surfaceview-in-thread-example/
 
-// TODO: change from surfaceview to view?
+// Must use surfaceview instead of view, so it can be continuously updated in the background
 
 public abstract class GraphThread extends SurfaceView implements SurfaceHolder.Callback, Runnable {
 

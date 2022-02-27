@@ -16,6 +16,7 @@ import android.os.Bundle;
 import android.util.Log;
 import android.view.Surface;
 import android.view.SurfaceHolder;
+import android.view.SurfaceView;
 
 import androidx.annotation.NonNull;
 
@@ -39,7 +40,7 @@ import java.nio.ByteOrder;
  */
 public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListener, SurfaceHolder.Callback {
     private static final String LOG_TAG = "CodecOutputSurface";
-    private static final boolean VERBOSE = true; // lots of logging
+    private static final boolean VERBOSE = false; // lots of logging
     private EGLCore mEGLCore;
     private OffscreenTextureRender mTextureRender;
     private int mVideoTextureID = -1, mFramebuffer = -1, mOffscreenTexture = -1;
@@ -48,7 +49,13 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
     private Surface mSurface; // decoder renders to this
     private Surface viewSurface = null; // things drawn to this are sent to the screen
 
-    private WindowSurface mWindowSurface;
+    private boolean newSurfaceFlag = false;
+
+    private SurfaceView mainView = null;
+
+    private EGLSurface mOffscreenSurface;
+
+    private EGLSurface mWindowSurface = null;
     private FullFrameRect mFullScreen;
 
     //private static Bitmap mapBitmap;
@@ -102,8 +109,8 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
 
         if(VERBOSE) Log.d(LOG_TAG, "EGL Setup");
         mEGLCore = new EGLCore(null, EGLCore.FLAG_TRY_GLES3);
-        EGLSurface surface = mEGLCore.createOffscreenSurface(mWidth, mHeight);
-        mEGLCore.makeCurrent(surface);
+        mOffscreenSurface = mEGLCore.createOffscreenSurface(mWidth, mHeight);
+        mEGLCore.makeCurrent(mOffscreenSurface);
 
         if(VERBOSE) Log.d(LOG_TAG, "Framebuffer Setup");
         prepareFramebuffer(); // this will create a texture attatched to a framebuffer for render to texture.
@@ -202,76 +209,6 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
     }
 
     /**
-     * Prepares EGL.  We want a GLES 2.0 context and a surface that supports pbuffer.
-     */
-    /*
-    private void eglSetup() {
-        mEGLDisplay = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY);
-        if (mEGLDisplay == EGL14.EGL_NO_DISPLAY) {
-            throw new RuntimeException("unable to get EGL14 display");
-        }
-        int[] version = new int[2];
-        if (!EGL14.eglInitialize(mEGLDisplay, version, 0, version, 1)) {
-            mEGLDisplay = null;
-            throw new RuntimeException("unable to initialize EGL14");
-        }
-
-        // Configure EGL for pbuffer and OpenGL ES 2.0, 24-bit RGB.
-        int[] attribList = {
-                EGL14.EGL_RED_SIZE, 8,
-                EGL14.EGL_GREEN_SIZE, 8,
-                EGL14.EGL_BLUE_SIZE, 8,
-                EGL14.EGL_ALPHA_SIZE, 8,
-                EGL14.EGL_DEPTH_SIZE, 0, // new
-                EGL14.EGL_STENCIL_SIZE, 0, // new
-                EGL14.EGL_RENDERABLE_TYPE, EGL14.EGL_OPENGL_ES2_BIT,
-                EGL14.EGL_SURFACE_TYPE, EGL14.EGL_PBUFFER_BIT,
-                EGL14.EGL_NONE
-        };
-
-        EGLConfig[] configs = new EGLConfig[1];
-        int[] numConfigs = new int[1];
-        if (!EGL14.eglChooseConfig(mEGLDisplay, attribList, 0, configs, 0, configs.length, numConfigs, 0)) {
-            throw new RuntimeException("unable to find RGB888+recordable ES2 EGL config");
-        }
-
-        // Configure context for OpenGL ES 2.0.
-        int[] attrib_list = {
-                EGL14.EGL_CONTEXT_CLIENT_VERSION, 2,
-                EGL14.EGL_NONE
-        };
-        mEGLContext = EGL14.eglCreateContext(mEGLDisplay, configs[0], EGL14.EGL_NO_CONTEXT, attrib_list, 0);
-        checkEglError("eglCreateContext");
-        if (mEGLContext == null) {
-            throw new RuntimeException("null context");
-        }
-
-        // Create a pbuffer surface.
-        int[] surfaceAttribs = {
-                EGL14.EGL_WIDTH, mWidth,
-                EGL14.EGL_HEIGHT, mHeight,
-                EGL14.EGL_NONE
-        };
-        mEGLSurface = EGL14.eglCreatePbufferSurface(mEGLDisplay, configs[0], surfaceAttribs, 0);
-        checkEglError("eglCreatePbufferSurface");
-        if (mEGLSurface == null) {
-            throw new RuntimeException("surface was null");
-        }
-    }
-    */
-
-    /**
-     * Makes our EGL context and surface current.
-     */
-    /*
-    public void makeCurrent() {
-        if (!EGL14.eglMakeCurrent(mEGLDisplay, mEGLSurface, mEGLSurface, mEGLContext)) {
-            throw new RuntimeException("eglMakeCurrent failed");
-        }
-    }
-    */
-
-    /**
      * Discard all resources held by this class, notably the EGL context.
      */
 
@@ -321,7 +258,7 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
      * with the EGLContext that contains the GL texture object used by SurfaceTexture.)
      */
     public void awaitNewImage() {
-        if(VERBOSE) Log.d(LOG_TAG, "Waiting for new image");
+        if(VERBOSE) Log.d(LOG_TAG, "Waiting for new frame");
 
         final int TIMEOUT_MS = 2500;
 
@@ -333,7 +270,9 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
                     mFrameSyncObject.wait(TIMEOUT_MS);
                     if (!mFrameAvailable) {
                         // TODO: if "spurious wakeup", continue while loop
-                        throw new RuntimeException("frame wait timed out");
+                        //throw new RuntimeException("frame wait timed out");
+                        Log.e(LOG_TAG, "frame wait timed out");
+                        break;
                     }
                 } catch (InterruptedException ie) {
                     // shouldn't happen
@@ -353,26 +292,46 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
 
     /**
      * Draws the data from SurfaceTexture onto the current EGL surface.
-     *
-     * @param invert if set, render the image with Y inverted (0,0 in top left)
      */
-    public void drawImage(boolean invert) { // This is where stuff happens
+    public void drawImage() { // This is where stuff happens
+        if(newSurfaceFlag) {
+            prepareGl(viewSurface);
+            newSurfaceFlag = false;
+        }
+
+        if(VERBOSE) Log.d(LOG_TAG, "render offscreen");
+        // https://stackoverflow.com/questions/30061753/drawing-on-multiple-surfaces-by-using-only-eglsurface
+        mEGLCore.makeCurrent(mOffscreenSurface);
         // steps from grafika recordFBOactivity line 955
         // draw the video texture to the framebuffer (render offscreen), which means its not on mOffscreenTexture
         GLES31.glBindFramebuffer(GLES31.GL_FRAMEBUFFER, mFramebuffer); // select the offscreen framebuffer instead of the default one
         checkGlError("glBindFramebuffer", LOG_TAG);
         mTextureRender.draw(mVideoTextureID); // TODO: mSurfaceTexture, invert?
 
+        if(mWindowSurface != null) {
+            if(VERBOSE) Log.d(LOG_TAG, "render onscreen");
+            mEGLCore.makeCurrent(mWindowSurface);
 
-        //viewSurface.makeCurrent();
+            // blit the offscreen framebuffer to the one shown to the user
+            GLES31.glBindFramebuffer(GLES31.GL_FRAMEBUFFER, 0);
+            checkGlError("glBindFramebuffer", LOG_TAG);
+            // TODO: currently drawing the video frame twice. Instead, draw the offscreen texture
 
-        // blit the offscreen framebuffer to the one shown to the user
-        GLES31.glBindFramebuffer(GLES31.GL_FRAMEBUFFER, 0);
-        checkGlError("glBindFramebuffer", LOG_TAG);
-        mTextureRender.draw(mVideoTextureID);
-        mFullScreen.drawFrame(mOffscreenTexture, IDENTITY_MATRIX);
-        // Todo: framebuffer blit instead of rendering again?
-        boolean swapResult = mWindowSurface.swapBuffers();
+            GLES31.glClearColor(0.0f, 0.0f, 1.0f, 1.0f);
+            GLES31.glClear(GLES31.GL_COLOR_BUFFER_BIT);
+
+            mTextureRender.draw(mVideoTextureID);
+            //mFullScreen.drawFrame(mOffscreenTexture, IDENTITY_MATRIX);
+            // Todo: framebuffer blit instead of rendering again?
+
+            boolean swapResult = mEGLCore.swapBuffers(mWindowSurface);
+
+            if (!swapResult) {
+                // This can happen if the Activity stops without waiting for us to halt.
+                Log.w(LOG_TAG, "swapBuffers failed, killing renderer thread");
+            }
+        }
+
 
         // blit again to rearrange the pixels
 
@@ -380,11 +339,6 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
 
         //putMainImageOnBitmap();
         //putDataImageOnBitmap();
-
-        if (!swapResult) {
-            // This can happen if the Activity stops without waiting for us to halt.
-            Log.w(LOG_TAG, "swapBuffers failed, killing renderer thread");
-        }
     }
 
     // SurfaceTexture callback
@@ -406,11 +360,17 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
     private void prepareGl(Surface surface) {
         Log.d(LOG_TAG, "prepareGl");
 
-        mWindowSurface = new WindowSurface(mEGLCore, surface, false);
-        mWindowSurface.makeCurrent();
+        mWindowSurface = mEGLCore.createWindowSurface(surface);
+        mEGLCore.makeCurrent(mWindowSurface);
+
+        //mWindowSurface = new WindowSurface(mEGLCore, surface, false);
+
+        //EGLContext sharedContext = EGL14.getCurrentContext();
+        //EGLDisplay display = EGL14.eglGetCurrentDisplay();
+        //mWindowSurface.makeCurrent();
 
         // Used for blitting texture to FBO.
-        mFullScreen = new FullFrameRect(new Texture2dProgram(Texture2dProgram.ProgramType.TEXTURE_2D));
+        //mFullScreen = new FullFrameRect(new Texture2dProgram(Texture2dProgram.ProgramType.TEXTURE_2D));
 
         // Program used for drawing onto the screen.
         //FlatShadedProgram mProgram = new FlatShadedProgram();
@@ -430,12 +390,21 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
 
     // SurfaceView Methods, from grafika RecordFBOactivity line 155
 
+    public SurfaceView getMainView() {
+        return mainView;
+    }
+
+    public void setMainView(SurfaceView mainView) {
+        this.mainView = mainView;
+        mainView.getHolder().addCallback(this);
+    }
+
     @Override
     public void surfaceCreated(@NonNull SurfaceHolder holder) {
         Log.d(LOG_TAG, "surfaceCreated holder=" + holder);
 
         viewSurface = holder.getSurface();
-        prepareGl(viewSurface);
+        newSurfaceFlag = true;
 
         /*SurfaceView sv = (SurfaceView) findViewById(R.id.fboActivity_surfaceView);
         //mRenderThread = new RenderThread(sv.getHolder(), new ActivityHandler(this), outputFile,
@@ -458,6 +427,7 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
     public void surfaceChanged(@NonNull SurfaceHolder holder, int format, int width, int height) {
         Log.d(LOG_TAG, "surfaceChanged fmt=" + format + " size=" + width + "x" + height +
                 " holder=" + holder);
+        newSurfaceFlag = true;
         //RenderHandler rh = mRenderThread.getHandler();
         /*if (rh != null) {
             rh.sendSurfaceChanged(format, width, height);
@@ -490,6 +460,7 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
         // call on doFrame().
         //Choreographer.getInstance().removeFrameCallback(this);
         viewSurface = null;
+        mWindowSurface = null;
 
         Log.d(LOG_TAG, "surfaceDestroyed complete");
     }

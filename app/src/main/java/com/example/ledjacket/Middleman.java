@@ -2,6 +2,8 @@ package com.example.ledjacket;
 
 // Used to pass data from AudioThread to SurfaceViewThreads
 
+import android.view.SurfaceView;
+
 import com.example.ledjacket.video.VideoThread;
 
 public class Middleman {
@@ -10,6 +12,8 @@ public class Middleman {
     private float[] beatData;
     
     private VideoThread videoThread = null;
+
+    //private SurfaceView mainView = null;
 
     public Middleman() {}
 

@@ -1,5 +1,7 @@
 package com.example.ledjacket.ui;
 
+import static java.lang.Thread.sleep;
+
 import android.content.Context;
 import android.os.Bundle;
 import android.util.Log;
@@ -81,14 +83,8 @@ public class VisualizerFragment extends Fragment {
         swt3.setMiddleman(middleman);
 
         final SurfaceView mainView = binding.mainView;
-        final BitmapView dataView = binding.dataView;
+        middleman.getVideoThread().setMainView(mainView);
 
-        //mainView.setBitmap(middleman.getVideoThread().getMainBitmap());
-        // wait for videothread to make the output surface
-        while(middleman.getVideoThread().getCodecOutputSurface() == null);
-
-        Log.d("Visualizer Fragment", "Ask for outputsurface from videothread");
-        mainView.getHolder().addCallback(middleman.getVideoThread().getCodecOutputSurface());
         //dataView.setBitmap(middleman.getVideoThread().getDataBitmap());
 
         return root;
