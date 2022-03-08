@@ -142,7 +142,6 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
         mSurface = new Surface(mSurfaceTexture);
 
         if(VERBOSE) Log.d(LOG_TAG, "Framebuffer Setup");
-        mOffscreenTextureID = transferTextureRender.createTexture();
         prepareFramebuffer(); // this will create a texture attatched to a framebuffer for render to texture.
         // this is necessary so that the video frame is available as a texture for the compute shader
         // this way other things can also render to this texture and then the whole thing can be processed in the compute shader
@@ -160,10 +159,14 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
     private void prepareFramebuffer() {
         checkGlError("prepareFramebuffer start", LOG_TAG);
 
+        GLES31.glViewport(0, 0, mWidth, mHeight);
+
+        mOffscreenTextureID = transferTextureRender.createTexture();
+
         // used to generate texture given by GL_TEXTURE_2D, now gets it from transferTextureRender
 
-        GLES31.glBindTexture(GLES31.GL_TEXTURE_2D, mOffscreenTextureID);
-        checkGlError("glBindTexture " + mOffscreenTextureID, LOG_TAG);
+        //GLES31.glBindTexture(GLES31.GL_TEXTURE_2D, mOffscreenTextureID);
+        //checkGlError("glBindTexture " + mOffscreenTextureID, LOG_TAG);
 
         // Create texture storage.
         GLES31.glTexImage2D(GLES31.GL_TEXTURE_2D, 0, GLES31.GL_RGBA, mWidth, mHeight, 0, GLES31.GL_RGBA, GLES31.GL_UNSIGNED_BYTE, null);
@@ -324,7 +327,7 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
             //GLES31.glClear(GLES31.GL_COLOR_BUFFER_BIT);
 
             // blit the offscreen stuff onto the visible surfaces
-            transferTextureRender.draw(mVideoTextureID);
+            transferTextureRender.draw(mOffscreenTextureID);
 
             boolean swapResult = mEGLCore.swapBuffers(mWindowSurface);
 

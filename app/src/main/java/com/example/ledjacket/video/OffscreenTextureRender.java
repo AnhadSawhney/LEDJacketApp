@@ -53,8 +53,8 @@ public class OffscreenTextureRender {
             (USE_EXTERNAL_OES ? "uniform samplerExternalOES sTexture;\n" : "uniform sampler2D sTexture;\n") +
             "varying vec2 v_texcoord;\n" +
             "void main(void) {\n" +
-            // "   gl_FragColor = texture2D(sTexture, v_texcoord);\n" +
-            "   gl_FragColor = vec4(v_texcoord.x, v_texcoord.y, 1.0, 1.0);\n" +
+            "   gl_FragColor = texture2D(sTexture, v_texcoord);\n" +
+            //"   gl_FragColor = vec4(v_texcoord.x, v_texcoord.y, 1.0, 1.0);\n" +
             "}";
 
     private FloatBuffer mVertexBuffer;
@@ -116,13 +116,14 @@ public class OffscreenTextureRender {
     }
 
     public void draw(int texture) {
+        checkGlError("Before draw", LOG_TAG);
         //if(VERBOSE) Log.d(LOG_TAG, "Draw called");
         //if(VERBOSE) Log.d(LOG_TAG, "in size=" + inWidth + "x" + inHeight + " out size=" + outWidth + "x" + outHeight);
         // (optional) clear to green so we can see if we're failing to set pixels
         //GLES31.glClearColor(0.0f, 1.0f, 0.0f, 1.0f);
         //GLES31.glClear(GLES31.GL_COLOR_BUFFER_BIT);
 
-        checkGlError("Before draw", LOG_TAG);
+        GLES31.glViewport(0, 0, outWidth, outHeight);
 
         //Log.i(LOG_TAG, "draw texture " + texture);
         GLES31.glUseProgram(mProgram);
