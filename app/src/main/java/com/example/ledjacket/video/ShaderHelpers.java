@@ -4,7 +4,10 @@ import android.graphics.Bitmap;
 import android.opengl.GLES31;
 import android.opengl.GLUtils;
 import android.opengl.Matrix;
+import android.os.Build;
 import android.util.Log;
+
+import androidx.annotation.RequiresApi;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -82,8 +85,27 @@ public class ShaderHelpers {
     public static void checkGlError(String op, String LOG_TAG) {
         int error;
         while ((error = GLES31.glGetError()) != GLES31.GL_NO_ERROR) {
-            Log.e(LOG_TAG, op + ": glError " + error);
-            throw new RuntimeException(op + ": glError " + error);
+            String estring = "";
+            switch(error) {
+                case GLES31.GL_INVALID_ENUM:
+                    estring = "Invalid Enum";
+                    break;
+                case GLES31.GL_INVALID_VALUE:
+                    estring = "Invalid Value";
+                    break;
+                case GLES31.GL_INVALID_OPERATION:
+                    estring = "Invalid Operation";
+                    break;
+                case GLES31.GL_INVALID_FRAMEBUFFER_OPERATION:
+                    estring = "Invalid Framebuffer Operation";
+                    break;
+                case GLES31.GL_OUT_OF_MEMORY:
+                    estring = "Out of Memory";
+                    break;
+            }
+
+            Log.e(LOG_TAG, op + ": glError " + error + " (" + estring + ")");
+            throw new RuntimeException(op + ": glError " + error + " (" + estring + ")");
         }
     }
 
@@ -157,18 +179,25 @@ public class ShaderHelpers {
             program = 0;
         }
 
+        GLES31.glDetachShader(program, vShader);
+        GLES31.glDetachShader(program, fShader);
+        GLES31.glDeleteShader(vShader);
+        GLES31.glDeleteShader(fShader);
+
         return program;
     }
 
-    private int checkFramebufferStatus(int target, String LOG_TAG) {
-        int status = GLES31.glCheckFramebufferStatus(target);
-
+    //@RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
+    public static int checkFramebufferStatus(String LOG_TAG) {
+        int status = GLES31.glCheckFramebufferStatus(GLES31.GL_FRAMEBUFFER);
+        boolean error = true;
         switch (status) {
             case GLES31.GL_FRAMEBUFFER_COMPLETE:
                 Log.d(LOG_TAG, "Framebuffer is complete");
-                int[] result = new int[1];
-                GLES31.glGetFramebufferParameteriv(GLES31.GL_READ_FRAMEBUFFER, GLES31.GL_SAMPLE_BUFFERS, result, 0);
-                Log.d(LOG_TAG, result[0] + " sample buffers");
+                //int[] result = new int[1];
+                //GLES31.glGetFramebufferParameteriv(GLES31.GL_READ_FRAMEBUFFER, GLES31.GL_SAMPLE_BUFFERS, result, 0);
+                //Log.d(LOG_TAG, result[0] + " sample buffers");
+                error = false;
                 break;
             case GLES31.GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT:
                 Log.e(LOG_TAG, "Framebuffer has incomplete attachment");
@@ -183,6 +212,11 @@ public class ShaderHelpers {
                 Log.e(LOG_TAG, "Framebuffer has unsupported configuration");
                 break;
         }
+
+        if(error) {
+            throw new RuntimeException("Framebuffer not complete, status=" + status);
+        }
+
         return status;
     }
 
