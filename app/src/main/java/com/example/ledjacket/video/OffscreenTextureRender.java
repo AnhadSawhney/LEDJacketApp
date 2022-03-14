@@ -18,6 +18,7 @@ public class OffscreenTextureRender {
     private static final boolean VERBOSE = true; // lots of logging
     private int inWidth, inHeight, outWidth, outHeight;
     private boolean USE_EXTERNAL_OES; // false for sampler2D, true for samplerexternalOES
+    private boolean GENERATE_TEST_TEXTURE;
 
     private int textureType;
 
@@ -47,23 +48,26 @@ public class OffscreenTextureRender {
             "   v_texcoord  = a_texcoord + uOffset;\n" +
             "}";
 
-    private String FRAGMENT_SHADER =
-            (USE_EXTERNAL_OES ? "#extension GL_OES_EGL_image_external : require\n" : "") +
-            "precision mediump float;\n" +
-            (USE_EXTERNAL_OES ? "uniform samplerExternalOES sTexture;\n" : "uniform sampler2D sTexture;\n") +
-            "varying vec2 v_texcoord;\n" +
-            "void main(void) {\n" +
-            "   gl_FragColor = texture2D(sTexture, v_texcoord);\n" +
-            //"   gl_FragColor = vec4(v_texcoord.x, v_texcoord.y, 1.0, 1.0);\n" +
-            "}";
+    private String FRAGMENT_SHADER;
 
     private FloatBuffer mVertexBuffer;
     private FloatBuffer mCoordBuffer;
     private float[] mMVPMatrix = new float[16];
 
-    public OffscreenTextureRender(int iw, int ih, int ow, int oh, boolean oes, String tag) {
+    public OffscreenTextureRender(int iw, int ih, int ow, int oh, boolean oes, boolean test, String tag) {
         LOG_TAG = tag;
         USE_EXTERNAL_OES = oes;
+        GENERATE_TEST_TEXTURE = test;
+
+        FRAGMENT_SHADER =
+                (USE_EXTERNAL_OES ? "#extension GL_OES_EGL_image_external : require\n" : "") +
+                "precision mediump float;\n" +
+                (USE_EXTERNAL_OES ? "uniform samplerExternalOES sTexture;\n" : "uniform sampler2D sTexture;\n") +
+                "varying vec2 v_texcoord;\n" +
+                "void main(void) {\n" +
+                (GENERATE_TEST_TEXTURE ? "gl_FragColor = vec4(v_texcoord.x, v_texcoord.y, 1.0, 1.0);\n" : "gl_FragColor = texture2D(sTexture, v_texcoord);\n") +
+                "}";
+
         textureType = USE_EXTERNAL_OES ? GLES11Ext.GL_TEXTURE_EXTERNAL_OES : GLES31.GL_TEXTURE_2D;
 
         if(VERBOSE) Log.d(LOG_TAG, "Created, texture type: " + (USE_EXTERNAL_OES ? "GL_TEXTURE_EXTERNAL_OES" : "GLES31.GL_TEXTURE_2D"));

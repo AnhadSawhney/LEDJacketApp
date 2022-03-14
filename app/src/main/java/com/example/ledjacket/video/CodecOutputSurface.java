@@ -23,6 +23,7 @@ import androidx.annotation.NonNull;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.IntBuffer;
 
 // From ExtractMpegFramesTest, copied to a separate file
 
@@ -116,8 +117,8 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
         mOffscreenSurface = mEGLCore.createOffscreenSurface(mWidth, mHeight);
         mEGLCore.makeCurrent(mOffscreenSurface);
 
-        videoTextureRender = new OffscreenTextureRender(mWidth, mHeight, mWidth, mHeight, true, "videoTextureRender"); // This is just for rendering the texture onto the surface
-        transferTextureRender = new OffscreenTextureRender(mWidth, mHeight, mWidth, mHeight, false, "transferTextureRender"); // output width and height are set by the surface when it is created
+        videoTextureRender = new OffscreenTextureRender(mWidth, mHeight, mWidth, mHeight, true, false,"videoTextureRender"); // This is just for rendering the texture onto the surface
+        transferTextureRender = new OffscreenTextureRender(mWidth, mHeight, mWidth, mHeight, false, false, "transferTextureRender"); // output width and height are set by the surface when it is created
         //mPixelProcessor = new PixelOrderProcessor();
 
         mVideoTextureID = videoTextureRender.createTexture();
@@ -201,6 +202,7 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
         checkGlError("glFramebufferRenderbuffer", LOG_TAG);
         GLES31.glFramebufferTexture2D(GLES31.GL_FRAMEBUFFER, GLES31.GL_COLOR_ATTACHMENT0,
                 GLES31.GL_TEXTURE_2D, mOffscreenTextureID, 0);
+
         checkGlError("glFramebufferTexture2D", LOG_TAG);
 
         // See if GLES is happy with all this.
