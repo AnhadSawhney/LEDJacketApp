@@ -59,15 +59,11 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
     private EGLSurface mOffscreenSurface;
 
     private EGLSurface mWindowSurface = null;
-    private FullFrameRect mFullScreen;
 
     //private static Bitmap mapBitmap;
     //private Bitmap mainBitmap;
     //private Bitmap dataBitmap;
 
-    //private EGLDisplay mEGLDisplay = EGL14.EGL_NO_DISPLAY;
-    //private EGLContext mEGLContext = EGL14.EGL_NO_CONTEXT;
-    //private EGLSurface mEGLSurface = EGL14.EGL_NO_SURFACE;
     static int mWidth;
     static int mHeight;
 
@@ -199,6 +195,7 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
 
         // Attach the depth buffer and the texture (color buffer) to the framebuffer object.
         //GLES31.glFramebufferRenderbuffer(GLES31.GL_FRAMEBUFFER, GLES31.GL_DEPTH_ATTACHMENT, GLES31.GL_RENDERBUFFER, mDepthBuffer);
+
         checkGlError("glFramebufferRenderbuffer", LOG_TAG);
         GLES31.glFramebufferTexture2D(GLES31.GL_FRAMEBUFFER, GLES31.GL_COLOR_ATTACHMENT0,
                 GLES31.GL_TEXTURE_2D, mOffscreenTextureID, 0);
@@ -219,16 +216,6 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
      */
 
     public void release() {
-        /*if (mEGLDisplay != EGL14.EGL_NO_DISPLAY) {
-            EGL14.eglDestroySurface(mEGLDisplay, mEGLSurface);
-            EGL14.eglDestroyContext(mEGLDisplay, mEGLContext);
-            EGL14.eglReleaseThread();
-            EGL14.eglTerminate(mEGLDisplay);
-        }
-        mEGLDisplay = EGL14.EGL_NO_DISPLAY;
-        mEGLContext = EGL14.EGL_NO_CONTEXT;
-        mEGLSurface = EGL14.EGL_NO_SURFACE;*/
-
         videoTextureRender.destroy();
         transferTextureRender.destroy();
 
@@ -369,18 +356,6 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
 
         mWindowSurface = mEGLCore.createWindowSurface(surface);
         mEGLCore.makeCurrent(mWindowSurface);
-
-        //mWindowSurface = new WindowSurface(mEGLCore, surface, false);
-
-        //EGLContext sharedContext = EGL14.getCurrentContext();
-        //EGLDisplay display = EGL14.eglGetCurrentDisplay();
-        //mWindowSurface.makeCurrent();
-
-        // Used for blitting texture to FBO.
-        //mFullScreen = new FullFrameRect(new Texture2dProgram(Texture2dProgram.ProgramType.TEXTURE_2D));
-
-        // Program used for drawing onto the screen.
-        //FlatShadedProgram mProgram = new FlatShadedProgram();
 
         // Set the background color.
         GLES31.glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
