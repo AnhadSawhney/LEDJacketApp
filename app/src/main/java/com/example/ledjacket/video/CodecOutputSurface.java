@@ -327,6 +327,8 @@ public class CodecOutputSurface implements SurfaceTexture.OnFrameAvailableListen
         }
 
 
+
+
         // blit again to rearrange the pixels
 
         // rearrange the pixels

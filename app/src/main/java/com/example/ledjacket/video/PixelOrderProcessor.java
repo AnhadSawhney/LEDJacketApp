@@ -9,6 +9,9 @@ import static com.example.ledjacket.video.ShaderHelpers.setTexParameters;
 import android.graphics.Bitmap;
 import android.opengl.GLES11Ext;
 import android.opengl.GLES31;
+import android.os.Build;
+
+import androidx.annotation.RequiresApi;
 
 public class PixelOrderProcessor {
     private static final String LOG_TAG = "PixelOrderProcessor";
@@ -60,12 +63,50 @@ public class PixelOrderProcessor {
     private int dataImageHandle;
 
     public void PixelOrderProcessor() {
+        mProgram = createProgram(COMPUTE_SHADER, LOG_TAG);
 
+        mapTextureHandle = GLES31.glGetUniformLocation(mProgram, "mapTexture");
+        checkLocation(mapTextureHandle, "mapTexture");
+
+        //mainImageHandle = GLES31.glGetUniformLocation(mProgram, "mainImage");
+        //checkLocation(mainImageHandle, "mainImage");
+
+        dataImageHandle = GLES31.glGetUniformLocation(mProgram, "dataImage");
+        checkLocation(dataImageHandle, "dataImage");
+
+        int[] textures = new int[3];
+        GLES31.glGenTextures(3, textures, 0);
+
+        videoTextureID = textures[0];
+        mapTextureID = textures[1];
+        //mainImageID = textures[2];
+        dataImageID = textures[2];
+
+        GLES31.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, videoTextureID);
+        checkGlError("glBindTexture videoTextureID", LOG_TAG);
+
+        // MINIMIZATION FILTER IS TAKING EFFECT
+        setTexParameters(GLES11Ext.GL_TEXTURE_EXTERNAL_OES);
+
+        //loadGLTextureFromBitmap(mapBitmap);
+
+        //GLES31.glBindTexture(GLES31.GL_TEXTURE_2D, mainImageID);
+        //setTexParameters(GLES31.GL_TEXTURE_2D);
+        //GLES31.glTexStorage2D(GLES31.GL_TEXTURE_2D, 1, GLES31.GL_RGBA32F, mWidth, mHeight);
+        //checkGlError("glTexStorage2D mainImageHandle", LOG_TAG);
+
+        GLES31.glBindTexture(GLES31.GL_TEXTURE_2D, dataImageID);
+        setTexParameters(GLES31.GL_TEXTURE_2D);                             // Get from python script 286, 128
+        GLES31.glTexStorage2D(GLES31.GL_TEXTURE_2D, 1, GLES31.GL_RGBA32F, 300, 200);
+        checkGlError("glTexStorage2D mainImageHandle", LOG_TAG);
+
+        GLES31.glViewport(0, 0, mWidth, mHeight);
 
     }
 
     // everything here and below is a mess
 
+    @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
     public void execute() {
         GLES31.glUseProgram(mProgram);
         checkGlError("glUseProgram", LOG_TAG);
@@ -114,45 +155,6 @@ public class PixelOrderProcessor {
      * Initializes GL state.  Call this after the EGL surface has been created and made current.
      */
     public void surfaceCreated() {
-        mProgram = createProgram(COMPUTE_SHADER, LOG_TAG);
-
-        mapTextureHandle = GLES31.glGetUniformLocation(mProgram, "mapTexture");
-        checkLocation(mapTextureHandle, "mapTexture");
-
-        //mainImageHandle = GLES31.glGetUniformLocation(mProgram, "mainImage");
-        //checkLocation(mainImageHandle, "mainImage");
-
-        dataImageHandle = GLES31.glGetUniformLocation(mProgram, "dataImage");
-        checkLocation(dataImageHandle, "dataImage");
-
-        int[] textures = new int[3];
-        GLES31.glGenTextures(3, textures, 0);
-
-        videoTextureID = textures[0];
-        mapTextureID = textures[1];
-        //mainImageID = textures[2];
-        dataImageID = textures[2];
-
-        GLES31.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, videoTextureID);
-        checkGlError("glBindTexture videoTextureID", LOG_TAG);
-
-        // MINIMIZATION FILTER IS TAKING EFFECT
-        setTexParameters(GLES11Ext.GL_TEXTURE_EXTERNAL_OES);
-
-        //loadGLTextureFromBitmap(mapBitmap);
-
-        //GLES31.glBindTexture(GLES31.GL_TEXTURE_2D, mainImageID);
-        //setTexParameters(GLES31.GL_TEXTURE_2D);
-        //GLES31.glTexStorage2D(GLES31.GL_TEXTURE_2D, 1, GLES31.GL_RGBA32F, mWidth, mHeight);
-        //checkGlError("glTexStorage2D mainImageHandle", LOG_TAG);
-
-        GLES31.glBindTexture(GLES31.GL_TEXTURE_2D, dataImageID);
-        setTexParameters(GLES31.GL_TEXTURE_2D);                             // Get from python script 286, 128
-        GLES31.glTexStorage2D(GLES31.GL_TEXTURE_2D, 1, GLES31.GL_RGBA32F, 300, 200);
-        checkGlError("glTexStorage2D mainImageHandle", LOG_TAG);
-
-        GLES31.glViewport(0, 0, mWidth, mHeight);
-
         /*int[] fbos = new int[1];
         GLES31.glGenFramebuffers(1, fbos, 0);
         //mainFBO = fbos[0];

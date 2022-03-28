@@ -1,66 +1,153 @@
 from PIL import Image
 
-# each tuple is (collumn offset: x, row offset: y)
-# collumn offset determines in what order pixels are sent to the LED driver ship
-# row offset determines which LEDs are selected by the shift register
+# row determines which LEDs are selected by the shift register
+# this is stored in r
+# column determines in what order pixels are sent to the LED driver chip
+# this is stored in g
 
-matrix = (((0,0),(0,1),(0,2),(0,3),(0,4),(0,5),(0,6),(0,7),(),(),(),(0,8),(),   (),   (),   (),   (),   (),   ()   ),
-          ((),   (1,1),(1,2),(1,3),(1,4),(1,5),(1,6),(1,7),(),(),(),(1,8),(1,0),(),   (),   (),   (),   (),   ()   ),
-          ((),   (),   (2,2),(2,3),(2,4),(2,5),(2,6),(2,7),(),(),(),(2,8),(2,0),(2,1),(),   (),   (),   (),   ()   ),
-          ((),   (),   (),   (3,3),(3,4),(3,5),(3,6),(3,7),(),(),(),(3,8),(3,0),(3,1),(3,2),(),   (),   (),   ()   ),
-          ((),   (),   (),   (),   (4,4),(4,5),(4,6),(4,7),(),(),(),(4,8),(4,0),(4,1),(4,2),(4,3),(),   (),   ()   ),
-          ((),   (),   (),   (),   (),   (5,5),(5,6),(5,7),(),(),(),(5,8),(5,0),(5,1),(5,2),(5,3),(5,4),(),   ()   ),
-          ((),   (),   (),   (),   (),   (),   (6,6),(6,7),(),(),(),(6,8),(6,0),(6,1),(6,2),(6,3),(6,4),(6,5),()   ),
-          ((),   (),   (),   (),   (),   (),   (),   (7,7),(),(),(),(7,8),(7,0),(7,1),(7,2),(7,3),(7,4),(7,5),(7,6)))
+# information contained is (led, skip, led)
+matrix = (
+    (8, 2, 0),
+    (7, 3, 0),
+    (6, 4, 0),
+    (5, 4, 1),
+    (4, 4, 2),
+    (3, 4, 3),
+    (2, 4, 4),
+    (1, 4, 5),
+    (0, 4, 6),  # this adds on to row 6
+    (0, 3, 7),  # this adds on to row 7
+)
+# 8 collumns, 8 rows total
 
-# 32x8 matrices is 592 x 85
-# 85 * 2 + 3 = 173
-# extend 88 more for double the height
-# 592 + 88 = 680
-img = Image.new("RGB", (592, 173), (255, 255, 255)) # default to white background
+# map fits nicely in 320x180 video resolution
+(WIDTH, HEIGHT) = (320, 180)
+
+img = Image.new("RGB", (WIDTH, HEIGHT), (255, 255, 255))  # default to white background
 
 pixels = img.load()
 
-# total 32x16 matrices
+numleds = 0
 
-numleds = 0;
+# chunks are described by the matrix tuple above
+# each block is composed of 4 chunks as such:
+# [/] [\]   =   normal, flip horizontal
+# [\] [/]   =   flip horizontal, normal
+#    ^  space of 3 leds in between
 
-for row in range(16):
-    basey = 11 * row # basex, basey are coordinates for the top right corner of where the matrix should be       
-    for collumn in range(32):
-        basex = basey + collumn * 16
-        if row > 7:
-            basex -= 88
-
-        y = 0
-        for u in matrix:
-            x = 0
-            for v in u: # v goes through each tuple in matrix
-                if v: # if v is empty, skip 
-                    c = collumn * 9 + v[0]
-                    b = c & 0xff # last byte
-                    c = c >> 8   
-                    g = c & 0xff # second to last byte
-                    numleds += 1
-                    try:
-                        pixels[basex + x, basey + y] = (row * 8 + v[1], g, b)
-                    except:
-                        print("Out of bounds: " + str(basex + x) + ", " + str(basey + y))
-                    # red is row, blue + green is a 16 bit int representing collumn
-
-                x += 1
-            y += 1
+# the whole image is 4 sections, each a 4x5 array of blocks
 
 
-# paste the generated image into full 640 x 360 image
-img2 = Image.new("RGB", (640, 360), (255, 255, 255)) # default to white background
+def doSection(posOffset, colOffset, sleeve):
+    workingat = list(posOffset)
 
-offset = ((img2.size[0] - img.size[0]) // 2, (img2.size[1] - img.size[1]) // 2)
-img2.paste(img, offset)
+    c = colOffset
+
+    for blockx in range(5):
+        blockCol = 0
+        for blocky in range(4):
+            workingat[0] = posOffset[0] + blockx * 26
+            workingat[1] = posOffset[1] + blocky * 20
+
+            doBlock(workingat, blocky * 16, c, sleeve)
+
+        c += 16
+
+
+def doBlock(posOffset, rowOffset, colOffset, sleeve):
+    # top left chunk
+    basey = posOffset[1]
+    basex = posOffset[0]
+
+    doChunk(basex, basey, rowOffset, colOffset, sleeve, False)
+
+    # top right chunk
+    # basey = posOffset[1]
+    basex += 13
+
+    doChunk(basex, basey, rowOffset, colOffset + 8, sleeve, True)
+
+    # bottom left chunk
+    basey += 10
+    basex = posOffset[0]
+
+    doChunk(basex, basey, rowOffset + 8, colOffset, sleeve, True)
+
+    # bottom right chunk
+    basey = posOffset[1] + 10
+    basex += 13
+
+    doChunk(basex, basey, rowOffset + 8, colOffset + 8, sleeve, False)
+
+
+def doChunk(basex, basey, rowOffset, colOffset, sleeve, flip):
+    global numleds
+
+    if flip:
+        first = 2
+        last = 0
+        firstoffset = -2
+        lastoffset = 0
+    else:
+        first = 0
+        last = 2
+        firstoffset = 0
+        lastoffset = -2
+
+    y = basey
+    for row in range(len(matrix)):
+        x = basex
+        c = 0
+
+        for led in range(matrix[row][first]):
+            try:
+                pixels[x, y] = (rowOffset + row + firstoffset, colOffset + c, sleeve)
+                numleds += 1
+            except:
+                print("Out of bounds: " + str(x) + ", " + str(y))
+            x += 1
+            c += 1
+
+        # skip
+        x += matrix[row][1]
+
+        for led in range(matrix[row][last]):
+            # the second row of leds is always offset by one
+            try:
+                pixels[x, y] = (rowOffset + row + lastoffset, colOffset + c, sleeve)
+                numleds += 1
+            except:
+                print("Out of bounds: " + str(x) + ", " + str(y))
+            x += 1
+            c += 1
+
+        y += 1
+
+
+# generate the full image
+# there are 16*5=80 rows in a section
+
+doSection((26, 4), 0, 0)
+doSection((162, 4), 80, 0)
+doSection((26, 94), 0, 1)
+doSection((162, 94), 80, 1)
+
+# maximums for r (row), g (column), b (sleeve): (32, 160, 1)
 
 print(str(numleds) + " leds / active pixels in total")
 
-img2.show()
-img2.save("map.bmp")
+# img.save("..\\app\\src\\main\\res\\drawable-nodpi\\map.bmp")
+
+# put the resulting image in \app\src\main\res\drawable-nodpi
+
+img.save("map.bmp")
+
+# make it nice for viewing (normalize r g b)
+for y in range(HEIGHT):
+    for x in range(WIDTH):
+        (r, g, b) = pixels[x, y]
+        pixels[x, y] = (int(r * 256 / 36), g, b * 256)
 
 
+img.show()
+img.save("mapPreview.png")
