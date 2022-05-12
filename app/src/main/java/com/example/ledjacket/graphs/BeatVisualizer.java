@@ -7,26 +7,40 @@ import android.util.Log;
 
 public class BeatVisualizer extends GraphThread {
 
+    private volatile float[] secondData;
+
     public BeatVisualizer(Context context) {
         super(context);
-        LOG_TAG = "Oscilloscope Visualizer";
+        LOG_TAG = "Beat Visualizer";
     }
 
     public BeatVisualizer(Context context, AttributeSet attrs) {
         super(context, attrs);
-        LOG_TAG = "Oscilloscope Visualizer";
+        LOG_TAG = "Beat Visualizer";
     }
 
     public BeatVisualizer(Context context, AttributeSet attrs, int defStyle) {
         super(context, attrs, defStyle);
-        LOG_TAG = "Oscilloscope Visualizer";
+        LOG_TAG = "Beat Visualizer";
+    }
+
+    private void setSecondData(float[] data) {
+        if(data.length > width) {
+            secondData = new float[width];
+            System.arraycopy(data, 0, secondData, 0, width); // deep copy
+        } else {
+            secondData = data;
+            //waveData = new float[data.length];
+            //.arraycopy(data, 0, waveData, 0, data.length);
+        }
     }
 
     @Override
-    protected void getDataFromMiddleman() {
+    protected void getDataFromMiddleman() { // BOTH THE LISTS MUST BE THE EXACT SAME SIZE
         if(middleman != null && !middleman.isOscEmpty()) {
             try {
                 setWaveData(middleman.getBeatData());
+                setSecondData(middleman.getLuminosityData());
             }catch (InterruptedException ex) {
                 Log.e(LOG_TAG, ex.getMessage());
             }
@@ -74,6 +88,19 @@ public class BeatVisualizer extends GraphThread {
                 points[i*2+1] = height / 2;
             }
         }*/
+
+        canvas.drawLines(points, paint);
+
+        paint.setColor(Color.YELLOW);
+
+        prevy = height * secondData[0];
+
+        for (int i = 1; i < waveData.length; i++) {
+            j = (i - 1) * 4;
+            points[j + 1] = prevy;
+            points[j + 3] = height * secondData[i]; // randomly sets values to 0 or height
+            prevy = points[j + 3];
+        }
 
         canvas.drawLines(points, paint);
     }

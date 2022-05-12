@@ -2,11 +2,8 @@ package com.example.ledjacket.audio;
 
 import android.os.SystemClock;
 import android.util.Log;
-
 import com.example.ledjacket.Middleman;
-
 import org.jtransforms.fft.DoubleFFT_1D;
-
 import java.util.Arrays;
 
 //COURTESY OF https://github.com/Plasmabot1/Android-Loopback-Oscilloscope
@@ -100,8 +97,10 @@ public class AudioThread implements Runnable {
 
         float[] specBuffer = new float[audioBuffer.length];
 
-        float[] beatDetect = new float[300]; // TODO: what is a good size?
-        float[] beatBuffer = new float[300];
+        float[] beatDetectBuffer = new float[300]; // TODO: what is a good size?
+        float[] luminosityBuffer = new float[300]; // same size for this one also
+
+        //float[] beatBuffer = new float[300];
 
         Log.d("AudioThread",String.format("bufferSize: %d", bufferSize));
 
@@ -222,20 +221,34 @@ public class AudioThread implements Runnable {
                 Log.e("AudioThread", ex.getMessage());
             }
 
-            for(int i = beatDetect.length-1; i > 0; i--) {
-                beatDetect[i] = beatDetect[i-1];
+            for(int i = beatDetectBuffer.length-1; i > 0; i--) {
+                beatDetectBuffer[i] = beatDetectBuffer[i-1];
+            }
+
+            for(int i = luminosityBuffer.length-1; i > 0; i--) {
+                luminosityBuffer[i] = luminosityBuffer[i-1];
             }
 
             float beat = (tmp[3] + tmp[4]) / 2.0f; // TODO: bad way of calculating beats
 
-            beatDetect[0] = peakDetector.run(beat);
+            beatDetectBuffer[0] = peakDetector.run(beat);
 
+            float lum = 0;
 
+            for(int i = 30; i < 230; i++) { // TODO: figure out how to calculate luminosity
+                lum += tmp[i];
+            }
 
-            //beatBuffer[0] = beat - runningavg + 0.5f;
+            luminosityBuffer[0] = lum / 199.0f * 2.0f;
 
             try {
-                middleman.putBeatData(beatDetect);
+                middleman.putBeatData(beatDetectBuffer);
+            }catch (InterruptedException ex) {
+                Log.e("AudioThread", ex.getMessage());
+            }
+
+            try {
+                middleman.putLuminosityData(luminosityBuffer);
             }catch (InterruptedException ex) {
                 Log.e("AudioThread", ex.getMessage());
             }
